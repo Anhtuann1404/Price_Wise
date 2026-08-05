@@ -1,0 +1,53 @@
+BÁO CÁO CHẤT LƯỢNG DỮ LIỆU - PriceWise
+============================================================
+
+1. THỐNG KÊ CHUNG
+   Tổng sản phẩm: 80
+   Số cột: 11
+   Ngành hàng: 27
+   Shop: 1
+
+2. THỐNG KÊ GIÁ
+   Min: 9,120 đ
+   Max: 1,473,000 đ
+   Trung bình: 138,899 đ
+   Trung vị: 107,800 đ
+   Độ lệch chuẩn: 194,831 đ
+
+3. THỐNG KÊ ĐÁNH GIÁ
+   Trung bình: 4.80 ⭐
+   Min: 0.0
+   Max: 5.0
+
+4. NGOẠI LAI PHÁT HIỆN
+   Số sản phẩm: 5
+   Tỷ lệ: 6.2%
+
+5. PHÂN BỐ THEO NGÀNH HÀNG
+   1084: 33 sản phẩm
+   67998: 7 sản phẩm
+   871: 5 sản phẩm
+   67867: 3 sản phẩm
+   67996: 3 sản phẩm
+   67999: 3 sản phẩm
+   853: 3 sản phẩm
+   6750: 2 sản phẩm
+   67994: 2 sản phẩm
+   847: 2 sản phẩm
+   1754: 1 sản phẩm
+   2250: 1 sản phẩm
+   385: 1 sản phẩm
+   664: 1 sản phẩm
+   67869: 1 sản phẩm
+   67871: 1 sản phẩm
+   67915: 1 sản phẩm
+   67980: 1 sản phẩm
+   67995: 1 sản phẩm
+   67997: 1 sản phẩm
+   68000: 1 sản phẩm
+   840: 1 sản phẩm
+   843: 1 sản phẩm
+   844: 1 sản phẩm
+   856: 1 sản phẩm
+   872: 1 sản phẩm
+   9725: 1 sản phẩm
