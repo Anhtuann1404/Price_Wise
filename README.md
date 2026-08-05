@@ -321,13 +321,6 @@ Sau khi chạy, sẽ tạo ra:
 
 ---
 
-## 📞 Liên hệ Hỗ Trợ
-
-- **Thành viên B (Data Analyst):** Yêu cầu: dữ liệu sạch CSV/JSON
-- **Thành viên C (ML Engineer):** Yêu cầu: dữ liệu sạch + ngoại lai flag
-- **Thành viên D (Product Lead):** Yêu cầu: dữ liệu sạch + báo cáo chất lượng
-
----
 
 **Lần cập nhật cuối:** 2026-08-05  
 **Phiên bản:** v2.0 (Thu thập + Làm sạch hoàn chỉnh)
