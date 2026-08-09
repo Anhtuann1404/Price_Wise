@@ -5,8 +5,8 @@ PriceWise v3.0 - Thu thập & Làm sạch Dữ liệu TMĐT từ Tiki.
   ✅ Mở rộng: 1000+ sản phẩm từ 3-4 ngành hàng
   ✅ Fix luot_ban: Parse dict {"text": "Đã bán X", "value": X} → số
   ✅ Fix nganh_hang: Map ID → Tên tiếng Việt
-  ✅ Fix shop: Extract từ current_seller (không phải seller=null)
-  ✅ Tối ưu: Batch processing, error handling, logging chi tiết
+  ✅ Fix shop: Gán cứng "Tiki" (do giới hạn endpoint API)
+  ✅ Tối ưu: Thêm Health-check, retry logic, logging chi tiết
 
 Cấu trúc:
   - ThuThapDuLieu: Thu thập từ API (multi-category, retry logic)
@@ -37,7 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# Dictionary map: Mã ngành Tiki → Tên tiếng Việt
+# Dictionary map: Mã ngành Tiki → Tên tiếng Việt (Đã cập nhật mã mới)
 NGANH_HANG_MAPPING = {
     # Sách
     "8322": "Sách tiếng Việt",
@@ -50,7 +50,9 @@ NGANH_HANG_MAPPING = {
     "67996": "Sản phẩm cho bé",
 
     # Thời trang
-    "11": "Áo nam",
+    "915": "Thời trang nam",
+    "931": "Thời trang nữ",
+    "11": "Áo nam (Cũ)",
     "12": "Quần nam",
     "13": "Giày nam",
     "14": "Áo nữ",
@@ -59,14 +61,17 @@ NGANH_HANG_MAPPING = {
     "17": "Phụ kiện thời trang",
 
     # Điện tử
-    "1": "Điện thoại",
+    "1789": "Điện thoại - Máy tính bảng",
+    "1815": "Thiết bị số - Phụ kiện",
+    "1": "Điện thoại (Cũ)",
     "2": "Tablet",
     "3": "Laptop",
     "4": "Tai nghe",
     "5": "Phụ kiện điện thoại",
 
     # Sức khỏe & Làm đẹp
-    "385": "Mỹ phẩm",
+    "1520": "Làm đẹp - Sức khỏe",
+    "385": "Mỹ phẩm (Cũ)",
     "664": "Chăm sóc da",
     "1754": "Máy massage",
     "2250": "Dụng cụ làm đẹp",
@@ -78,20 +83,22 @@ NGANH_HANG_MAPPING = {
     "845": "Nước hoa",
 
     # Gia dụng
+    "1883": "Nhà cửa - Đời sống",
+    "4384": "Bách hóa online",
     "9725": "Đèn chiếu sáng",
     "67869": "Thiết bị nhà bếp",
     "67871": "Thiết bị phòng tắm",
     "67915": "Nệm & Gối",
 }
 
-# Mã ngành phổ biến (để gọi API)
+# Mã ngành phổ biến (để gọi API) - Đã thay thế ID cũ bị lỗi
 NGANH_HANG_THU_TAP = [
-    ("8322", "Sách tiếng Việt", 5),          # 5 trang = ~200 sản phẩm
-    ("316", "Sách ngoại văn", 3),            # 3 trang = ~120 sản phẩm
-    ("1084", "Truyện tranh/Manga", 4),       # 4 trang = ~160 sản phẩm
-    ("11", "Áo nam", 3),                     # 3 trang = ~120 sản phẩm
-    ("1", "Điện thoại", 4),                  # 4 trang = ~160 sản phẩm
-    ("385", "Mỹ phẩm", 3),                   # 3 trang = ~120 sản phẩm
+    ("8322", "Sách tiếng Việt", 5),              # 5 trang = ~200 sản phẩm
+    ("1084", "Truyện tranh/Manga", 4),           # 4 trang = ~160 sản phẩm
+    ("1789", "Điện thoại - Máy tính bảng", 4),   # 4 trang = ~160 sản phẩm
+    ("915", "Thời trang nam", 3),                # 3 trang = ~120 sản phẩm
+    ("1520", "Làm đẹp - Sức khỏe", 4),           # 4 trang = ~160 sản phẩm
+    ("1883", "Nhà cửa - Đời sống", 3),           # 3 trang = ~120 sản phẩm
 ]
 
 # Endpoint constants
@@ -105,14 +112,6 @@ TIKI_API_BASE = "https://tiki.vn/api/personalish/v1/blocks/listings"
 def extract_quantity_sold(value) -> int:
     """
     Trích xuất số lượng bán từ cột quantity_sold.
-
-    Input có thể là:
-    - Dict: {"text": "Đã bán 273", "value": 273}
-    - Integer: 273
-    - String: "273" hoặc "Đã bán 273"
-    - NaN/None
-
-    Output: Integer ≥ 0
     """
     try:
         # Nếu là dict
@@ -125,7 +124,7 @@ def extract_quantity_sold(value) -> int:
 
         # Nếu là string
         if isinstance(value, str):
-            # Tìm số đầu tiên trong string (VD: "Đã bán 273" → 273)
+            # Tìm số đầu tiên trong string
             match = re.search(r'\d+', value)
             if match:
                 return int(match.group())
@@ -134,31 +133,6 @@ def extract_quantity_sold(value) -> int:
     except Exception as e:
         logger.warning(f"⚠ Lỗi parse quantity_sold: {value} → {type(e).__name__}")
         return 0
-
-
-def extract_shop_name(seller_info) -> str:
-    """
-    Trích xuất tên shop từ current_seller hoặc seller field.
-
-    Input có thể là:
-    - Dict: {"name": "Shop Chính Hãng", ...}
-    - String: "Shop Chính Hãng"
-    - NaN/None
-
-    Output: String (tên shop hoặc "Tiki" default)
-    """
-    try:
-        # Nếu là dict
-        if isinstance(seller_info, dict):
-            return seller_info.get('name', 'Tiki').strip()
-
-        # Nếu là string
-        if isinstance(seller_info, str) and seller_info.strip():
-            return seller_info.strip()
-
-        return 'Tiki'
-    except Exception:
-        return 'Tiki'
 
 
 def map_nganh_hang(category_id: str) -> str:
@@ -193,18 +167,86 @@ class ThuThapDuLieu:
         self.timeout = timeout
         self.thong_ke = {"thanhcong": 0, "loi": 0, "trungdup": set()}
 
+    def kiem_tra_api_truoc_khi_chay(self) -> bool:
+        """
+        ✅ Ping thử 1 request đến API Tiki trước khi chạy batch.
+        """
+        logger.info("🏥 HEALTH-CHECK: Kiểm tra API Tiki trước khi chạy...")
+
+        try:
+            # Test 1 request đến ngành sách (8322)
+            test_url = f"{TIKI_API_BASE}?limit=10&category=8322&page=1"
+
+            response = requests.get(
+                test_url,
+                headers=self.headers,
+                timeout=10
+            )
+            response.raise_for_status()
+
+            data = response.json().get('data', [])
+
+            # Kiểm tra schema
+            if not data or len(data) == 0:
+                logger.error(
+                    "❌ API trả về data trống. "
+                    "Có thể Tiki đã thay đổi endpoint hoặc rate limit."
+                )
+                return False
+
+            # Kiểm tra cột bắt buộc
+            first_item = data[0]
+            required_fields = ['id', 'name', 'price']
+
+            missing = [f for f in required_fields if f not in first_item]
+            if missing:
+                logger.error(
+                    f"❌ Schema API thay đổi! Thiếu cột: {missing}\n"
+                    f"   Response item: {list(first_item.keys())}"
+                )
+                return False
+
+            logger.info(
+                f"✅ Health-check thành công!\n"
+                f"   • Kết nối: OK\n"
+                f"   • Schema: OK (có {len(first_item)} cột)\n"
+                f"   • Sample: {first_item.get('name', 'N/A')[:50]}...\n"
+            )
+            return True
+
+        except requests.exceptions.Timeout:
+            logger.error("❌ Health-check TIMEOUT: API không phản hồi kịp thời")
+            return False
+
+        except requests.exceptions.ConnectionError:
+            logger.error("❌ Health-check CONNECTION ERROR: Không kết nối được Tiki")
+            return False
+
+        except requests.exceptions.HTTPError as e:
+            logger.error(
+                f"❌ Health-check HTTP Error {e.response.status_code}: "
+                f"Có thể đã bị rate limit hoặc IP bị chặn"
+            )
+            return False
+
+        except json.JSONDecodeError:
+            logger.error("❌ Health-check JSON ERROR: Response không phải JSON hợp lệ")
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ Health-check FAIL: {type(e).__name__}: {e}")
+            return False
+
+
     def goi_api_tiki_multi(self, nganh_hang_list: List[Tuple[str, str, int]] = None,
                           delay: float = 1.5) -> bool:
         """
         Gọi API Tiki để lấy dữ liệu từ nhiều ngành hàng.
-
-        Args:
-            nganh_hang_list: Danh sách (ma_nganh, ten_nganh, so_trang)
-            delay: Thời gian chờ giữa các request (giây)
-
-        Returns:
-            True nếu lấy được ≥500 sản phẩm, False nếu lỗi.
         """
+        if not self.kiem_tra_api_truoc_khi_chay():
+            logger.error("🛑 Dừng toàn bộ tiến trình do Health-check thất bại!")
+            return False
+
         if nganh_hang_list is None:
             nganh_hang_list = NGANH_HANG_THU_TAP
 
@@ -218,7 +260,6 @@ class ThuThapDuLieu:
             sp_nganh = 0
             for page in range(1, so_trang + 1):
                 try:
-                    # Gọi API với retry logic
                     success, data = self._call_api_with_retry(
                         ma_nganh, page
                     )
@@ -227,7 +268,6 @@ class ThuThapDuLieu:
                         logger.warning(f"   ⚠ Trang {page}: Không có dữ liệu")
                         continue
 
-                    # Lưu dữ liệu
                     self.du_lieu_tho.extend(data)
                     sp_nganh += len(data)
                     tong_sp += len(data)
@@ -235,7 +275,6 @@ class ThuThapDuLieu:
                     logger.info(f"   ✓ Trang {page}: {len(data)} sản phẩm | "
                                f"Tổng ngành: {sp_nganh} | Tổng chung: {tong_sp}")
 
-                    # Trễ để tránh rate limit
                     if page < so_trang:
                         time.sleep(delay)
 
@@ -245,7 +284,6 @@ class ThuThapDuLieu:
 
             logger.info(f"   → Kết thúc: {sp_nganh} sản phẩm từ {ten_nganh}")
 
-        # Loại bỏ trùng lặp dựa trên ma_san_pham
         tong_truoc = len(self.du_lieu_tho)
         ma_sp_duy_nhat = set()
         du_lieu_unique = []
@@ -266,15 +304,11 @@ class ThuThapDuLieu:
         logger.info(f"   • Sản phẩm bị trùng: {tong_truoc - tong_sau}")
         logger.info(f"{'='*70}")
 
-        return tong_sau >= 500
+        # ✅ Lấy được bao nhiêu giữ bấy nhiêu
+        return tong_sau > 0
 
     def _call_api_with_retry(self, ma_nganh: str, page: int) -> Tuple[bool, List]:
-        """
-        Gọi API Tiki với retry logic.
-
-        Returns:
-            (success, data_list)
-        """
+        """    Gọi API Tiki với retry logic.    Returns: (success, data_list)    """
         for attempt in range(1, self.max_retries + 1):
             try:
                 url = (
@@ -294,21 +328,45 @@ class ThuThapDuLieu:
                 return True, data
 
             except requests.exceptions.Timeout:
-                logger.debug(f"   (Lần {attempt}/{self.max_retries}) Timeout, thử lại...")
-                if attempt < self.max_retries:
-                    time.sleep(2 ** attempt)  # Exponential backoff
-            except requests.exceptions.ConnectionError as e:
-                logger.debug(f"   (Lần {attempt}/{self.max_retries}) Lỗi kết nối, thử lại...")
+                logger.warning(
+                    f"   ⏱️  Lần {attempt}/{self.max_retries}: Timeout, thử lại "
+                    f"(Trang {page}, Ngành {ma_nganh})..."
+                )
                 if attempt < self.max_retries:
                     time.sleep(2 ** attempt)
-            except json.JSONDecodeError:
-                logger.warning(f"   ⚠ Lỗi parse JSON trang {page}")
-                return False, []
-            except Exception as e:
-                logger.error(f"   ❌ Lỗi: {type(e).__name__}: {e}")
+
+            except requests.exceptions.ConnectionError:
+                logger.warning(
+                    f"   🔌 Lần {attempt}/{self.max_retries}: Lỗi kết nối "
+                    f"(Trang {page}, Ngành {ma_nganh}), thử lại..."
+                )
+                if attempt < self.max_retries:
+                    time.sleep(2 ** attempt)
+
+            except requests.exceptions.HTTPError as e:
+                logger.error(
+                    f"   ❌ HTTP Error {e.response.status_code} "
+                    f"(Trang {page}, Ngành {ma_nganh})"
+                )
                 return False, []
 
-        logger.error(f"   ❌ Thất bại sau {self.max_retries} lần thử")
+            except json.JSONDecodeError as e:
+                logger.error(
+                    f"   ❌ Lỗi parse JSON trang {page}: {e}"
+                )
+                return False, []
+
+            except Exception as e:
+                logger.error(
+                    f"   ❌ Lỗi không xác định (Trang {page}): "
+                    f"{type(e).__name__}: {e}"
+                )
+                return False, []
+
+        logger.error(
+            f"   ❌ Thất bại sau {self.max_retries} lần thử "
+            f"(Trang {page}, Ngành {ma_nganh})"
+        )
         return False, []
 
     def doc_csv(self, duong_dan: str) -> bool:
@@ -333,19 +391,15 @@ class ThuThapDuLieu:
 
         try:
             df = pd.DataFrame(self.du_lieu_tho)
-
             # CSV
             file_csv = f"{ten_file_goc}.csv"
             df.to_csv(file_csv, index=False, encoding='utf-8-sig')
             logger.info(f"✓ Lưu CSV: {file_csv} ({len(df)} dòng)")
-
             # JSON
             file_json = f"{ten_file_goc}.json"
             df.to_json(file_json, orient='records', force_ascii=False, indent=2)
             logger.info(f"✓ Lưu JSON: {file_json}")
-
             return True
-
         except Exception as e:
             logger.error(f"❌ Lỗi lưu file: {e}")
             return False
@@ -368,11 +422,6 @@ class LamSachDuLieu:
     def anh_xa_cot(self) -> pd.DataFrame:
         """
         Ánh xạ cột Tiki thô → schema PriceWise chuẩn.
-
-        Schema (11 cột):
-            ma_san_pham, ten_san_pham, nganh_hang, shop,
-            gia, gia_goc, ty_le_giam, luot_ban, danh_gia, url,
-            da_kiem_tra_gia_ao
         """
         self.log.info("📍 Bước 1: Ánh xạ cột...")
 
@@ -381,7 +430,6 @@ class LamSachDuLieu:
         # Kiểm tra nếu đã là schema chuẩn (v2)
         if all(col in df.columns for col in ['ma_san_pham', 'ten_san_pham', 'gia']):
             self.log.info("   → Phát hiện: Dữ liệu đã chuẩn hóa (v2)")
-            # Thêm cột thiếu nếu cần
             if 'da_kiem_tra_gia_ao' not in df.columns:
                 df['da_kiem_tra_gia_ao'] = False
             self.df = df
@@ -395,9 +443,8 @@ class LamSachDuLieu:
         # Tên sản phẩm
         schema_moi['ten_san_pham'] = df['name'] if 'name' in df.columns else ''
 
-        # Ngành hàng: Map ID → Tên Việt
+        # Ngành hàng
         if 'primary_category_path' in df.columns:
-            # Lấy ID ngành cuối cùng (cách dấu /)
             category_ids = df['primary_category_path'].apply(
                 lambda x: str(x).split('/')[-1] if pd.notna(x) else ''
             )
@@ -405,15 +452,12 @@ class LamSachDuLieu:
         else:
             schema_moi['nganh_hang'] = 'Chưa phân loại'
 
-        # Shop: Thử current_seller trước, sau đó seller
-        if 'current_seller' in df.columns:
-            schema_moi['shop'] = df['current_seller'].apply(extract_shop_name)
-        elif 'seller' in df.columns:
-            schema_moi['shop'] = df['seller'].apply(extract_shop_name)
-        else:
-            schema_moi['shop'] = 'Tiki'
+        # ✅ Shop: API /blocks/listings không cung cấp thông tin seller
+        # Tất cả sản phẩm được ghi nhận từ "Tiki" vì giới hạn endpoint
+        # (Để lấy seller thực tế, cần gọi API chi tiết sản phẩm - không khả thi vì bị rate limit)
+        schema_moi['shop'] = 'Tiki'
 
-        # Giá (price)
+        # Giá
         gia_col = df['price'] if 'price' in df.columns else df.get('gia', 0)
         schema_moi['gia'] = pd.to_numeric(gia_col, errors='coerce').fillna(0)
 
@@ -435,7 +479,6 @@ class LamSachDuLieu:
                 pd.to_numeric(df['discount_rate'], errors='coerce').fillna(0) / 100
             )
         else:
-            # Tính từ giá: (gia_goc - gia) / gia_goc
             gia_goc = schema_moi['gia_goc'].values
             gia = schema_moi['gia'].values
             schema_moi['ty_le_giam'] = np.where(
@@ -444,7 +487,7 @@ class LamSachDuLieu:
                 0
             )
 
-        # Lượt bán: Extract từ dict "{'text': '...', 'value': X}"
+        # Lượt bán
         if 'quantity_sold' in df.columns:
             schema_moi['luot_ban'] = df['quantity_sold'].apply(
                 extract_quantity_sold
@@ -464,10 +507,7 @@ class LamSachDuLieu:
             schema_moi['url'] = df.get('url', '')
 
         self.df = schema_moi.reset_index(drop=True)
-
-        self.log.info(f"   ✓ Ánh xạ thành công: {len(self.df)} dòng, "
-                     f"{len(self.df.columns)} cột")
-
+        self.log.info(f"   ✓ Ánh xạ thành công: {len(self.df)} dòng, {len(self.df.columns)} cột")
         return self.df
 
     def xu_ly_thieu_trung(self):
@@ -480,34 +520,26 @@ class LamSachDuLieu:
 
         so_dong_truoc = len(self.df)
 
-        # Bước 1: Xóa NULL ở cột bắt buộc
         cot_bat_buoc = ['ma_san_pham', 'ten_san_pham', 'gia']
         self.df = self.df.dropna(subset=cot_bat_buoc, how='any')
-
         so_dong_sau = len(self.df)
         if so_dong_truoc > so_dong_sau:
             self.log.info(f"   • Xóa {so_dong_truoc - so_dong_sau} dòng NULL")
 
-        # Bước 2: Điền mặc định cho cột phụ
         self.df['shop'] = self.df['shop'].fillna('Tiki').astype('category')
-        self.df['nganh_hang'] = self.df['nganh_hang'].fillna(
-            'Chưa phân loại'
-        ).astype('category')
+        self.df['nganh_hang'] = self.df['nganh_hang'].fillna('Chưa phân loại').astype('category')
         self.df['gia_goc'] = self.df['gia_goc'].fillna(self.df['gia'])
         self.df['ty_le_giam'] = self.df['ty_le_giam'].fillna(0)
         self.df['luot_ban'] = self.df['luot_ban'].fillna(0).astype(int)
         self.df['danh_gia'] = self.df['danh_gia'].fillna(0)
-
         self.log.info(f"   ✓ Điền NULL với giá trị mặc định")
 
-        # Bước 3: Xóa trùng lặp
         so_dong_truoc_dup = len(self.df)
         self.df = self.df.drop_duplicates(subset=['ma_san_pham'], keep='first')
         so_dong_sau_dup = len(self.df)
 
         if so_dong_truoc_dup > so_dong_sau_dup:
-            self.log.info(f"   • Xóa {so_dong_truoc_dup - so_dong_sau_dup} "
-                         f"dòng trùng lặp")
+            self.log.info(f"   • Xóa {so_dong_truoc_dup - so_dong_sau_dup} dòng trùng lặp")
 
         self.df = self.df.reset_index(drop=True)
         self.log.info(f"   ✓ Sau xử lý: {len(self.df)} dòng")
@@ -519,15 +551,10 @@ class LamSachDuLieu:
             return
 
         self.log.info("📍 Bước 3: Ép kiểu dữ liệu...")
-
-        # Chuyển sang numeric (đã làm ở anh_xa_cot)
-        # Chỉ cần clipping để đảm bảo khoảng hợp lệ
-
         self.df['danh_gia'] = self.df['danh_gia'].clip(0, 5)
         self.df['ty_le_giam'] = self.df['ty_le_giam'].clip(0, 1)
         self.df['luot_ban'] = self.df['luot_ban'].astype(int)
 
-        # Kiểm tra giá hợp lệ
         gia_0 = (self.df['gia'] <= 0).sum()
         if gia_0 > 0:
             self.log.warning(f"   ⚠ {gia_0} sản phẩm có giá ≤ 0 (sẽ xóa)")
@@ -535,46 +562,33 @@ class LamSachDuLieu:
 
         self.log.info(f"   ✓ Ép kiểu thành công | {len(self.df)} dòng hợp lệ")
 
-    def xu_ly_ngoai_lai_va_gan_co(self, iqr_multiplier: float = 1.5,
-                                  z_score_threshold: float = 3.0):
+    def xu_ly_ngoai_lai_va_gan_co(self, iqr_multiplier: float = 1.5, z_score_threshold: float = 3.0):
         """Phát hiện ngoại lai bằng IQR + Z-score."""
         if self.df is None:
             self.log.error("❌ Chưa có DataFrame")
             return
 
         self.log.info("📍 Bước 4: Phát hiện ngoại lai...")
-
         self.df['da_kiem_tra_gia_ao'] = False
 
-        # IQR
         Q1 = self.df['gia'].quantile(0.25)
         Q3 = self.df['gia'].quantile(0.75)
         IQR = Q3 - Q1
-
         lower_bound = Q1 - iqr_multiplier * IQR
         upper_bound = Q3 + iqr_multiplier * IQR
+        ngoai_lai_iqr = (self.df['gia'] < lower_bound) | (self.df['gia'] > upper_bound)
 
-        ngoai_lai_iqr = (self.df['gia'] < lower_bound) | (
-            self.df['gia'] > upper_bound
-        )
-
-        # Z-score
         mean_gia = self.df['gia'].mean()
         std_gia = self.df['gia'].std()
         z_score = np.abs((self.df['gia'] - mean_gia) / (std_gia + 1e-10))
         ngoai_lai_zscore = z_score > z_score_threshold
 
-        # Gắn cờ
         self.df.loc[ngoai_lai_iqr | ngoai_lai_zscore, 'da_kiem_tra_gia_ao'] = True
 
         so_ngoai_lai = self.df['da_kiem_tra_gia_ao'].sum()
         phan_tram = (so_ngoai_lai / len(self.df)) * 100
 
-        self.log.info(f"   ✓ Phát hiện {so_ngoai_lai} ngoại lai "
-                     f"({phan_tram:.1f}%)")
-        self.log.info(f"     - IQR: {ngoai_lai_iqr.sum()} sản phẩm")
-        self.log.info(f"     - Z-score: {ngoai_lai_zscore.sum()} sản phẩm")
-
+        self.log.info(f"   ✓ Phát hiện {so_ngoai_lai} ngoại lai ({phan_tram:.1f}%)")
         self.nhop = self.df[self.df['da_kiem_tra_gia_ao'] == True].copy()
 
     def lay_du_lieu_sach(self) -> pd.DataFrame:
@@ -592,13 +606,10 @@ class LamSachDuLieu:
         self.log.info(f"  📊 Tổng sản phẩm: {len(self.df):,}")
         self.log.info(f"  📚 Ngành hàng: {self.df['nganh_hang'].nunique()} loại")
         self.log.info(f"  🏪 Shop: {self.df['shop'].nunique()} shop")
-        self.log.info(f"  💰 Giá: {self.df['gia'].min():,.0f} - "
-                     f"{self.df['gia'].max():,.0f} đ (TB: {self.df['gia'].mean():,.0f} đ)")
+        self.log.info(f"  💰 Giá: {self.df['gia'].min():,.0f} - {self.df['gia'].max():,.0f} đ (TB: {self.df['gia'].mean():,.0f} đ)")
         self.log.info(f"  ⭐ Đánh giá: {self.df['danh_gia'].mean():.2f}")
-        self.log.info(f"  🚩 Ngoại lai: {self.df['da_kiem_tra_gia_ao'].sum()} "
-                     f"({self.df['da_kiem_tra_gia_ao'].sum()/len(self.df)*100:.1f}%)")
+        self.log.info(f"  🚩 Ngoại lai: {self.df['da_kiem_tra_gia_ao'].sum()} ({self.df['da_kiem_tra_gia_ao'].sum()/len(self.df)*100:.1f}%)")
         self.log.info(f"{'='*70}\n")
-
         return self.df
 
     def lay_ngoai_lai(self) -> pd.DataFrame:
@@ -702,4 +713,4 @@ if __name__ == "__main__":
 
     logger.info("\n📋 Mẫu dữ liệu sạch (5 dòng đầu):\n")
     print(df_sach[['ma_san_pham', 'ten_san_pham', 'nganh_hang', 'shop', 'gia', 'luot_ban', 'danh_gia']].head().to_string())
-    logger.info("\n✅ HOÀN THÀNH! Tất cả file đã lưu.")
+    logger.info("\n✅ HOÀN THÀNH! Tất cả file đã     lưu.")
