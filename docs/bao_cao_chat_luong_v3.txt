@@ -2,35 +2,59 @@ BÁO CÁO CHẤT LƯỢNG DỮ LIỆU - PriceWise v3.0
 ======================================================================
 
 1. THỐNG KÊ CHUNG
-   Tổng sản phẩm: 816
+   Tổng sản phẩm: 818
    Số cột: 11
-   Ngành hàng: 1
+   Ngành hàng: 25
    Shop: 1
 
 2. THỐNG KÊ GIÁ
    Min: 7,900 đ
    Max: 40,990,000 đ
-   Trung bình: 1,316,946 đ
-   Trung vị: 138,500 đ
-   Std: 4,009,967 đ
+   Trung bình: 1,364,701 đ
+   Trung vị: 138,800 đ
+   Std: 4,187,245 đ
 
 3. THỐNG KÊ LƯỢT BÁN
    Min: 0
    Max: 578294
-   Trung bình: 5841.1
-   Trung vị: 162
+   Trung bình: 5827.0
+   Trung vị: 161
 
 4. THỐNG KÊ ĐÁNH GIÁ
-   Trung bình: 3.98 ⭐
+   Trung bình: 3.97 ⭐
    Min: 0.0
    Max: 5.0
 
 5. NGOẠI LAI PHÁT HIỆN
-   Số sản phẩm: 126
-   Tỷ lệ: 15.4%
+   Số sản phẩm: 127
+   Tỷ lệ: 15.5%
 
 6. TOP 10 SHOP (THEO SỐ LƯỢNG)
-   Tiki: 816 sản phẩm
+   Tiki: 818 sản phẩm
 
 7. PHÂN BỐ THEO NGÀNH HÀNG
-   Điện thoại (Cũ): 816 sản phẩm (100.0%)
+   Làm đẹp - Sức khỏe: 160 sản phẩm (19.6%)
+   Truyện tranh/Manga: 160 sản phẩm (19.6%)
+   Nhà cửa - Đời sống: 120 sản phẩm (14.7%)
+   Thời trang nam: 120 sản phẩm (14.7%)
+   Điện thoại - Máy tính bảng: 116 sản phẩm (14.2%)
+   Sách ngoại văn: 40 sản phẩm (4.9%)
+   Tô màu - Luyện chữ: 25 sản phẩm (3.1%)
+   Tẩy rửa mặt: 11 sản phẩm (1.3%)
+   Nước hoa: 10 sản phẩm (1.2%)
+   Sách thiếu nhi: 10 sản phẩm (1.2%)
+   Đồ chơi thương hiệu: 7 sản phẩm (0.9%)
+   Vitamin & Thực phẩm bổ sung: 6 sản phẩm (0.7%)
+   Đồ chơi học tập: 6 sản phẩm (0.7%)
+   Máy massage: 5 sản phẩm (0.6%)
+   Sản phẩm cho bé: 5 sản phẩm (0.6%)
+   Chăm sóc cơ thể: 3 sản phẩm (0.4%)
+   Nệm & Gối: 3 sản phẩm (0.4%)
+   Chăm sóc da: 2 sản phẩm (0.2%)
+   Kem dưỡng ẩm: 2 sản phẩm (0.2%)
+   Mỹ phẩm (Cũ): 2 sản phẩm (0.2%)
+   Dụng cụ làm đẹp: 1 sản phẩm (0.1%)
+   Mặt nạ/Serum: 1 sản phẩm (0.1%)
+   Thiết bị nhà bếp: 1 sản phẩm (0.1%)
+   Thiết bị phòng tắm: 1 sản phẩm (0.1%)
+   Đèn chiếu sáng: 1 sản phẩm (0.1%)

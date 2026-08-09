@@ -4,7 +4,7 @@ PriceWise v3.0 - Thu thập & Làm sạch Dữ liệu TMĐT từ Tiki.
 🔄 Cập nhật chính:
   ✅ Mở rộng: 1000+ sản phẩm từ 3-4 ngành hàng
   ✅ Fix luot_ban: Parse dict {"text": "Đã bán X", "value": X} → số
-  ✅ Fix nganh_hang: Map ID → Tên tiếng Việt
+  ✅ Fix nganh_hang: Map ID → Tên tiếng Việt (Ưu tiên danh mục con)
   ✅ Fix shop: Gán cứng "Tiki" (do giới hạn endpoint API)
   ✅ Tối ưu: Thêm Health-check, retry logic, logging chi tiết
 
@@ -136,15 +136,15 @@ def extract_quantity_sold(value) -> int:
 
 
 def map_nganh_hang(category_path) -> str:
-    """Map chuỗi path mã ngành → Tên tiếng Việt."""
+    """Map chuỗi path mã ngành → Tên tiếng Việt (Ưu tiên danh mục con)."""
     if not category_path or pd.isna(category_path):
         return "Chưa phân loại"
 
     # Tách chuỗi path thành danh sách các mã ID
     ids = str(category_path).split('/')
 
-    # Kiểm tra xem có mã nào nằm trong TỪ ĐIỂN của mình không
-    for cat_id in ids:
+    # ✅ FIX: Quét ngược từ danh mục chi tiết nhất lên danh mục gốc
+    for cat_id in reversed(ids):
         if cat_id in NGANH_HANG_MAPPING:
             return NGANH_HANG_MAPPING[cat_id]
 
@@ -451,7 +451,7 @@ class LamSachDuLieu:
         # Tên sản phẩm
         schema_moi['ten_san_pham'] = df['name'] if 'name' in df.columns else ''
 
-        # Ngành hàng
+        # Ngành hàng - Đã fix ở đây để truyền category path
         if 'primary_category_path' in df.columns:
             schema_moi['nganh_hang'] = df['primary_category_path'].apply(map_nganh_hang)
         else:
@@ -718,4 +718,4 @@ if __name__ == "__main__":
 
     logger.info("\n📋 Mẫu dữ liệu sạch (5 dòng đầu):\n")
     print(df_sach[['ma_san_pham', 'ten_san_pham', 'nganh_hang', 'shop', 'gia', 'luot_ban', 'danh_gia']].head().to_string())
-    logger.info("\n✅ HOÀN THÀNH! Tất cả file đã     lưu.")
+    logger.info("\n✅ HOÀN THÀNH! Tất cả file đã lưu.")
