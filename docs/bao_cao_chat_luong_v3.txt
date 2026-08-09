@@ -1,0 +1,62 @@
+BÁO CÁO CHẤT LƯỢNG DỮ LIỆU - PriceWise v3.0
+======================================================================
+
+1. THỐNG KÊ CHUNG
+   Tổng sản phẩm: 80
+   Số cột: 11
+   Ngành hàng: 27
+   Shop: 1
+
+2. THỐNG KÊ GIÁ
+   Min: 9,120 đ
+   Max: 1,473,000 đ
+   Trung bình: 138,899 đ
+   Trung vị: 107,800 đ
+   Std: 194,831 đ
+
+3. THỐNG KÊ LƯỢT BÁN
+   Min: 0
+   Max: 40420
+   Trung bình: 3785.7
+   Trung vị: 552
+
+4. THỐNG KÊ ĐÁNH GIÁ
+   Trung bình: 4.80 ⭐
+   Min: 0.0
+   Max: 5.0
+
+5. NGOẠI LAI PHÁT HIỆN
+   Số sản phẩm: 5
+   Tỷ lệ: 6.2%
+
+6. TOP 10 SHOP (THEO SỐ LƯỢNG)
+   Tiki: 80 sản phẩm
+
+7. PHÂN BỐ THEO NGÀNH HÀNG
+   Truyện tranh/Manga: 33 sản phẩm (41.2%)
+   Sách thiếu nhi: 7 sản phẩm (8.8%)
+   Tô màu - Luyện chữ: 5 sản phẩm (6.2%)
+   Ngành 67999: 3 sản phẩm (3.8%)
+   Sản phẩm cho bé: 3 sản phẩm (3.8%)
+   Vitamin & Thực phẩm bổ sung: 3 sản phẩm (3.8%)
+   Đồ chơi học tập: 3 sản phẩm (3.8%)
+   Chăm sóc cơ thể: 2 sản phẩm (2.5%)
+   Ngành 67994: 2 sản phẩm (2.5%)
+   Đồ chơi thương hiệu: 2 sản phẩm (2.5%)
+   Chăm sóc da: 1 sản phẩm (1.2%)
+   Dụng cụ làm đẹp: 1 sản phẩm (1.2%)
+   Kem dưỡng ẩm: 1 sản phẩm (1.2%)
+   Máy massage: 1 sản phẩm (1.2%)
+   Mặt nạ/Serum: 1 sản phẩm (1.2%)
+   Mỹ phẩm: 1 sản phẩm (1.2%)
+   Ngành 67980: 1 sản phẩm (1.2%)
+   Ngành 67995: 1 sản phẩm (1.2%)
+   Ngành 67997: 1 sản phẩm (1.2%)
+   Ngành 68000: 1 sản phẩm (1.2%)
+   Ngành 856: 1 sản phẩm (1.2%)
+   Ngành 872: 1 sản phẩm (1.2%)
+   Nệm & Gối: 1 sản phẩm (1.2%)
+   Thiết bị nhà bếp: 1 sản phẩm (1.2%)
+   Thiết bị phòng tắm: 1 sản phẩm (1.2%)
+   Tẩy rửa mặt: 1 sản phẩm (1.2%)
+   Đèn chiếu sáng: 1 sản phẩm (1.2%)
