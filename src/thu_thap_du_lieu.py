@@ -135,13 +135,21 @@ def extract_quantity_sold(value) -> int:
         return 0
 
 
-def map_nganh_hang(category_id: str) -> str:
-    """Map mã ngành (ID) → Tên tiếng Việt."""
-    if not category_id:
+def map_nganh_hang(category_path) -> str:
+    """Map chuỗi path mã ngành → Tên tiếng Việt."""
+    if not category_path or pd.isna(category_path):
         return "Chưa phân loại"
 
-    category_id = str(category_id).strip()
-    return NGANH_HANG_MAPPING.get(category_id, f"Ngành {category_id}")
+    # Tách chuỗi path thành danh sách các mã ID
+    ids = str(category_path).split('/')
+
+    # Kiểm tra xem có mã nào nằm trong TỪ ĐIỂN của mình không
+    for cat_id in ids:
+        if cat_id in NGANH_HANG_MAPPING:
+            return NGANH_HANG_MAPPING[cat_id]
+
+    # Nếu xui lắm không có mã nào khớp, mới lấy mã cuối cùng
+    return f"Ngành {ids[-1]}"
 
 
 # ============================================================================
@@ -445,10 +453,7 @@ class LamSachDuLieu:
 
         # Ngành hàng
         if 'primary_category_path' in df.columns:
-            category_ids = df['primary_category_path'].apply(
-                lambda x: str(x).split('/')[-1] if pd.notna(x) else ''
-            )
-            schema_moi['nganh_hang'] = category_ids.apply(map_nganh_hang)
+            schema_moi['nganh_hang'] = df['primary_category_path'].apply(map_nganh_hang)
         else:
             schema_moi['nganh_hang'] = 'Chưa phân loại'
 
