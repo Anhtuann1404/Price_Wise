@@ -1,11 +1,5 @@
 """
-PriceWise v4.0 - Thu thập & Làm sạch Dữ liệu TMĐT từ Tiki & Shopee (Multi-Platform).
-
-🚀 Cập nhật v4.0:
-  ✅ Tích hợp Shopee API (demo vài trăm sản phẩm)
-  ✅ Thêm cột 'nen_tang' phân biệt Tiki vs Shopee
-  ✅ Error handling chặt chẽ cho Shopee (lỗi 403, timeout, v.v.)
-  ✅ Thêm Mock Data: Tự tạo data Shopee giả lập nếu bị API chặn để test bảng.
+PriceWise v4.3 - Thu thập & Làm sạch Dữ liệu TMĐT (Tiki + Kaggle Dataset).
 """
 
 import json
@@ -17,9 +11,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from collections import Counter
 from datetime import datetime
-
 
 # ============================================================================
 # LOGGING & CONFIGURATION
@@ -32,40 +24,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# CONSTANTS: TIKI 6 NGÀNH
+# ============================================================================
 
-# Tiki - Category mapping
 NGANH_HANG_MAPPING = {
-    "8322": "Sách tiếng Việt",
-    "316": "Sách ngoại văn",
-    "1084": "Truyện tranh/Manga",
-    "67998": "Sách thiếu nhi",
-    "871": "Tô màu - Luyện chữ",
-    "1789": "Điện thoại - Máy tính bảng",
-    "1815": "Thiết bị số - Phụ kiện",
-    "915": "Thời trang nam",
-    "931": "Thời trang nữ",
-    "1520": "Làm đẹp - Sức khỏe",
-    "1883": "Nhà cửa - Đời sống",
-    "4384": "Bách hóa online",
+    "8322": "Sách tiếng Việt", "316": "Sách ngoại văn", "1084": "Truyện tranh/Manga",
+    "67998": "Sách thiếu nhi", "871": "Tô màu - Luyện chữ", "915": "Thời trang nam",
+    "931": "Thời trang nữ", "11": "Áo nam", "12": "Quần nam", "13": "Giày nam",
+    "14": "Áo nữ", "15": "Quần nữ", "16": "Giày nữ", "17": "Phụ kiện thời trang",
+    "1789": "Điện thoại - Máy tính bảng", "1815": "Thiết bị số - Phụ kiện",
+    "1": "Điện thoại", "2": "Tablet", "3": "Laptop", "4": "Tai nghe",
+    "5": "Phụ kiện điện thoại", "1520": "Làm đẹp - Sức khỏe", "385": "Mỹ phẩm",
+    "664": "Chăm sóc da", "1754": "Máy massage", "853": "Vitamin & Thực phẩm bổ sung",
+    "1883": "Nhà cửa - Đời sống", "4384": "Bách hóa online",
 }
 
 NGANH_HANG_THU_TAP_TIKI = [
-    ("8322", "Sách tiếng Việt", 3),
-    ("1084", "Truyện tranh/Manga", 2),
-    ("1789", "Điện thoại - Máy tính bảng", 2),
+    ("8322", "Sách tiếng Việt", 15),
+    ("316", "Sách ngoại văn", 15),
+    ("1084", "Truyện tranh/Manga", 15),
+    ("11", "Áo nam", 15),
+    ("1", "Điện thoại", 15),
+    ("385", "Mỹ phẩm", 15),
 ]
 
-# Shopee - Category (demo)
-SHOPEE_SEARCH_KEYWORDS = [
-    ("sách", 2),
-    ("điện thoại", 2),
-    ("thời trang nam", 2),
-]
-
-# API Endpoints
 TIKI_API_BASE = "https://tiki.vn/api/personalish/v1/blocks/listings"
-SHOPEE_API_BASE = "https://shopee.vn/api/v4/search/search_items"
-
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -73,95 +57,51 @@ SHOPEE_API_BASE = "https://shopee.vn/api/v4/search/search_items"
 
 def extract_quantity_sold(value) -> int:
     try:
-        if isinstance(value, dict):
-            return int(value.get('value', 0))
-        if isinstance(value, (int, float)):
-            return int(max(value, 0))
+        if isinstance(value, dict): return int(value.get('value', 0))
+        if isinstance(value, (int, float)): return int(max(value, 0))
         if isinstance(value, str):
             match = re.search(r'\d+', value)
             return int(match.group()) if match else 0
         return 0
-    except Exception as e:
-        logger.warning(f"⚠ Lỗi parse quantity_sold: {value}")
+    except:
         return 0
 
-
 def map_nganh_hang_tiki(category_path: str) -> str:
-    """Map chuỗi path mã ngành Tiki → Tên Việt (Ưu tiên danh mục con)."""
-    if not category_path or pd.isna(category_path):
-        return "Chưa phân loại"
+    if not category_path or pd.isna(category_path): return "Chưa phân loại"
     ids = str(category_path).split('/')
     for cat_id in reversed(ids):
-        if cat_id in NGANH_HANG_MAPPING:
-            return NGANH_HANG_MAPPING[cat_id]
-    return f"Ngành {ids[-1]}"
-
+        if cat_id in NGANH_HANG_MAPPING: return NGANH_HANG_MAPPING[cat_id]
+    return f"Ngành {ids[-1] if ids else 'Unknown'}"
 
 # ============================================================================
 # CLASS: ThuThapTiki
 # ============================================================================
 
 class ThuThapTiki:
-    def __init__(self, max_retries: int = 3, timeout: int = 10):
+    def __init__(self, timeout: int = 10):
         self.du_lieu_tho = []
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        self.max_retries = max_retries
+        self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         self.timeout = timeout
 
-    def kiem_tra_api_truoc_khi_chay(self) -> bool:
-        logger.info("🏥 HEALTH-CHECK TIKI: Kiểm tra API Tiki trước khi chạy...")
-        try:
-            test_url = f"{TIKI_API_BASE}?limit=10&category=8322&page=1"
-            response = requests.get(test_url, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            data = response.json().get('data', [])
-            if not data:
-                logger.error("❌ API Tiki trả về data trống")
-                return False
-            logger.info(f"✅ Health-check Tiki thành công! ({len(data)} items)")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Health-check Tiki fail: {type(e).__name__}")
-            return False
-
-    def goi_api_tiki_multi(self, nganh_hang_list: List[Tuple[str, str, int]] = None, delay: float = 1.5) -> bool:
-        if not self.kiem_tra_api_truoc_khi_chay():
-            logger.error("🛑 Dừng Tiki do health-check fail")
-            return False
-
-        if nganh_hang_list is None:
-            nganh_hang_list = NGANH_HANG_THU_TAP_TIKI
-
+    def goi_api_tiki_multi(self) -> bool:
         tong_sp = 0
-        logger.info(f"🔄 Thu thập Tiki từ {len(nganh_hang_list)} ngành hàng...")
+        logger.info(f"🔄 Thu thập Tiki từ 6 ngành hàng...")
 
-        for ma_nganh, ten_nganh, so_trang in nganh_hang_list:
-            logger.info(f"   📥 {ten_nganh} (Mã: {ma_nganh}) | {so_trang} trang")
+        for ma_nganh, ten_nganh, so_trang in NGANH_HANG_THU_TAP_TIKI:
             sp_nganh = 0
-
             for page in range(1, so_trang + 1):
                 try:
                     url = f"{TIKI_API_BASE}?limit=40&category={ma_nganh}&page={page}"
                     response = requests.get(url, headers=self.headers, timeout=self.timeout)
                     response.raise_for_status()
                     data = response.json().get('data', [])
-
                     if data:
                         self.du_lieu_tho.extend(data)
                         sp_nganh += len(data)
                         tong_sp += len(data)
-                        logger.info(f"      ✓ Trang {page}: {len(data)} sp | Tổng: {tong_sp}")
-
-                    if page < so_trang:
-                        time.sleep(delay)
-                except requests.exceptions.Timeout:
-                    logger.warning(f"      ⏱️  Timeout trang {page}, thử lại...")
-                    time.sleep(2)
-                except Exception as e:
-                    logger.warning(f"      ⚠ Trang {page}: {type(e).__name__}")
-
+                    time.sleep(1.0)
+                except Exception:
+                    pass
             logger.info(f"   → {ten_nganh}: {sp_nganh} sp")
 
         # Loại trùng
@@ -173,314 +113,155 @@ class ThuThapTiki:
                 ma_sp_seen.add(ma_sp)
                 du_lieu_unique.append(item)
         self.du_lieu_tho = du_lieu_unique
-
-        logger.info(f"\n✅ TIKI HOÀN THÀNH: {len(self.du_lieu_tho)} sản phẩm (loại trùng)")
+        logger.info(f"\n✅ TIKI HOÀN THÀNH: {len(self.du_lieu_tho)} sản phẩm")
         return len(self.du_lieu_tho) > 0
 
-
 # ============================================================================
-# CLASS: ThuThapShopee (Cập nhật: Thêm Mock Data để test multi-platform)
+# CLASS: DocKaggles
 # ============================================================================
 
-class ThuThapShopee:
-    def __init__(self, max_retries: int = 3, timeout: int = 15):
+class DocKaggles:
+    def __init__(self, csv_path: str):
         self.du_lieu_tho = []
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                         'AppleWebKit/537.36 (KHTML, like Gecko) '
-                         'Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://shopee.vn/'
-        }
-        self.max_retries = max_retries
-        self.timeout = timeout
-        self.bi_chan = False
+        self.csv_path = csv_path
 
-    def tao_du_lieu_gia_lap(self):
-        """Tạo dữ liệu Shopee mẫu để test logic gộp khi API thật bị chặn."""
-        logger.info("   👉 Đang tạo dữ liệu Shopee giả lập để test cấu trúc bảng...")
-        self.du_lieu_tho.extend([
-            {
-                "itemid": "SP001",
-                "shopid": "SHOP99",
-                "name": "[Shopee Test] Sách Đắc Nhân Tâm - Hàng Chính Hãng",
-                "price": 8500000000, # API Shopee nhân giá gốc với 100,000
-                "item_rating": {"rating_average": 4.9},
-                "sold": 1250
-            },
-            {
-                "itemid": "SP002",
-                "shopid": "SHOP99",
-                "name": "[Shopee Test] Điện thoại iPhone 15 Pro Max 256GB",
-                "price": 2950000000000,
-                "item_rating": {"rating_average": 4.8},
-                "sold": 340
-            },
-            {
-                "itemid": "SP003",
-                "shopid": "SHOP99",
-                "name": "[Shopee Test] Áo thun nam cotton form rộng",
-                "price": 15000000000,
-                "item_rating": {"rating_average": 4.5},
-                "sold": 5000
-            }
-        ])
+    def doc_tu_csv(self) -> bool:
+        logger.info("📂 KAGGLE: Đọc dữ liệu từ CSV...")
 
-    def kiem_tra_api_truoc_khi_chay(self) -> bool:
-        logger.info("🏥 HEALTH-CHECK SHOPEE: Kiểm tra API Shopee...")
-        try:
-            response = requests.get(
-                SHOPEE_API_BASE,
-                params={'keyword': 'sách', 'limit': 10, 'offset': 0},
-                headers=self.headers,
-                timeout=self.timeout
-            )
-            if response.status_code == 403:
-                logger.error("❌ Shopee chặn bot (403 Forbidden)")
-                self.bi_chan = True
-                return False
-            response.raise_for_status()
-            data = response.json().get('items', [])
-            if not data:
-                return False
-            return True
-        except Exception:
-            self.bi_chan = True
+        if not self.csv_path or not Path(self.csv_path).exists():
             return False
 
-    def goi_api_shopee(self, keyword_list: List[Tuple[str, int]] = None, delay: float = 3.0) -> bool:
-        if not self.kiem_tra_api_truoc_khi_chay() or self.bi_chan:
-            logger.warning("⚠️ API Shopee không khả dụng. Kích hoạt chế độ Mock Data.")
-            self.tao_du_lieu_gia_lap()
-            return True
+        try:
+            df = pd.read_csv(self.csv_path, encoding='utf-8', on_bad_lines='skip', low_memory=False)
+            logger.info(f"   ✓ Đọc CSV: {len(df)} dòng, {len(df.columns)} cột")
 
-        if keyword_list is None:
-            keyword_list = SHOPEE_SEARCH_KEYWORDS
+            # MẸO CHUẨN HÓA: Ép toàn bộ tên cột về chữ thường để tránh lỗi viết hoa/thường
+            df.columns = df.columns.str.strip().str.lower()
 
-        tong_sp = 0
-        for keyword, so_page in keyword_list:
-            for page in range(so_page):
-                if self.bi_chan: break
-                try:
-                    response = requests.get(
-                        SHOPEE_API_BASE,
-                        params={'keyword': keyword, 'limit': 50, 'offset': page * 50},
-                        headers=self.headers,
-                        timeout=self.timeout
-                    )
-                    if response.status_code == 403:
-                        self.bi_chan = True
+            cot_map = {
+                'product_id': ['product_id', 'id', 'itemid', '_primarykey'],
+                'product_name': ['product_name', 'name', 'title'],
+                'price': ['price', 'gia', 'giá'],
+                'rating': ['rating', 'stars', 'rating_average', 'ratingstar', 'item_rating'],
+                'num_sold': ['num_sold', 'sold', 'quantity_sold', 'luot_ban', 'historicalsold', 'soldcount'],
+            }
+
+            for col_standard, col_options in cot_map.items():
+                for col_alt in col_options:
+                    if col_alt in df.columns and col_standard not in df.columns:
+                        df.rename(columns={col_alt: col_standard}, inplace=True)
                         break
-                    response.raise_for_status()
-                    data = response.json().get('items', [])
-                    if data:
-                        self.du_lieu_tho.extend(data)
-                    time.sleep(delay)
-                except Exception:
-                    continue
 
-        # Nếu đã chạy mà vẫn không có data (do lỗi), thì bơm data giả lập vào
-        if not self.du_lieu_tho:
-            self.tao_du_lieu_gia_lap()
+            # Nếu dữ liệu thiếu cột giá, ép mặc định 50k để không bị lọc xóa mất
+            required_cols = ['product_id', 'product_name', 'price', 'rating', 'num_sold']
+            for col in required_cols:
+                if col not in df.columns:
+                    df[col] = 50000 if col == 'price' else (0 if col in ['rating', 'num_sold'] else 'Unknown_Kaggle')
 
-        # Loại trùng lặp
-        du_lieu_unique = []
-        ma_sp_seen = set()
-        for item in self.du_lieu_tho:
-            ma_sp = str(item.get('itemid', item.get('id')))
-            if ma_sp not in ma_sp_seen:
-                ma_sp_seen.add(ma_sp)
-                du_lieu_unique.append(item)
-        self.du_lieu_tho = du_lieu_unique
+            df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(50000)
+            df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(0)
+            df['num_sold'] = pd.to_numeric(df['num_sold'], errors='coerce').fillna(0)
 
-        logger.info(f"\n✅ SHOPEE HOÀN THÀNH: {len(self.du_lieu_tho)} sản phẩm")
-        return len(self.du_lieu_tho) > 0
+            self.du_lieu_tho = []
+            for _, row in df.iterrows():
+                gia = float(row['price'])
+                item = {
+                    'itemid': f"KG_{row['product_id']}",  # Thêm KG_ để ID không bị trùng lặp
+                    'name': str(row['product_name']),
+                    'price': gia * 100000 if 0 < gia < 1000 else gia,
+                    'item_rating': {'rating_average': float(row['rating'])},
+                    'sold': int(row['num_sold']),
+                }
+                self.du_lieu_tho.append(item)
 
+            logger.info(f"   ✓ Trích xuất thành công: {len(self.du_lieu_tho)} sản phẩm Kaggle")
+            return len(self.du_lieu_tho) > 0
+
+        except Exception as e:
+            logger.error(f"❌ Lỗi xử lý CSV Kaggle: {type(e).__name__} - {str(e)}")
+            return False
 
 # ============================================================================
-# CLASS: LamSachDuLieu
+# CLASS: LamSachDuLieu (Merge Tiki + Kaggle)
 # ============================================================================
 
 class LamSachDuLieu:
-    def __init__(self, du_lieu_tiki: List[Dict], du_lieu_shopee: List[Dict]):
+    def __init__(self, du_lieu_tiki: List[Dict], du_lieu_kaggle: List[Dict]):
         self.du_lieu_tiki = du_lieu_tiki
-        self.du_lieu_shopee = du_lieu_shopee
+        self.du_lieu_kaggle = du_lieu_kaggle
         self.df = None
         self.nhop = pd.DataFrame()
-        self.log = logger
-
-    def chuyen_doi_shopee(self, item: Dict) -> Dict:
-        return {
-            'id': str(item.get('itemid', '')),
-            'name': item.get('name', ''),
-            'price': float(item.get('price', 0)) / 100000 if item.get('price') else 0,
-            'rating_average': float(item.get('item_rating', {}).get('rating_average', 0)) if item.get('item_rating') else 0,
-            'quantity_sold': item.get('sold', 0),
-            'url': f"https://shopee.vn/-{item.get('name', '')}-i.{item.get('shopid', '')}.{item.get('itemid', '')}",
-        }
 
     def gop_du_lieu(self):
-        self.log.info("📊 Gộp dữ liệu Tiki + Shopee...")
+        logger.info("📊 Gộp dữ liệu Tiki + Kaggle...")
 
-        du_lieu_tiki_clean = []
-        for item in self.du_lieu_tiki:
-            du_lieu_tiki_clean.append({
-                'id': str(item.get('id', '')),
-                'name': item.get('name', ''),
-                'price': float(item.get('price', 0)),
-                'rating_average': float(item.get('rating_average', 0)),
-                'quantity_sold': extract_quantity_sold(item.get('quantity_sold')),
-                'primary_category_path': item.get('primary_category_path', ''),
-                'url': f"https://tiki.vn/{item.get('url_path', '')}",
-            })
+        du_lieu_tiki_clean = [{
+            'id': str(i.get('id', '')), 'name': i.get('name', ''), 'price': float(i.get('price', 0)),
+            'rating_average': float(i.get('rating_average', 0)), 'quantity_sold': extract_quantity_sold(i.get('quantity_sold')),
+            'primary_category_path': i.get('primary_category_path', ''), 'url': f"https://tiki.vn/{i.get('url_path', '')}",
+            'nen_tang': 'Tiki'
+        } for i in self.du_lieu_tiki]
 
-        du_lieu_shopee_clean = []
-        for item in self.du_lieu_shopee:
-            du_lieu_shopee_clean.append(self.chuyen_doi_shopee(item))
+        du_lieu_kaggle_clean = [{
+            'id': str(i.get('itemid', '')), 'name': i.get('name', ''),
+            'price': float(i.get('price', 0)) / 100000 if i.get('price') and float(i.get('price')) > 10000 else float(i.get('price', 0)),
+            'rating_average': float(i.get('item_rating', {}).get('rating_average', 0)),
+            'quantity_sold': i.get('sold', 0), 'url': f"https://kaggle.com/dataset/item-{i.get('itemid', '')}",
+            'nen_tang': 'Kaggle', 'primary_category_path': 'Kaggle Dataset'
+        } for i in self.du_lieu_kaggle]
 
         df_tiki = pd.DataFrame(du_lieu_tiki_clean)
-        df_shopee = pd.DataFrame(du_lieu_shopee_clean)
+        df_kaggle = pd.DataFrame(du_lieu_kaggle_clean)
 
-        df_tiki['nen_tang'] = 'Tiki'
-        df_shopee['nen_tang'] = 'Shopee'
-
-        if len(df_tiki) > 0:
+        if not df_tiki.empty:
             df_tiki['nganh_hang'] = df_tiki['primary_category_path'].apply(map_nganh_hang_tiki)
-        else:
-            df_tiki['nganh_hang'] = ''
 
-        df_shopee['nganh_hang'] = 'Khác (Shopee)'
+        if not df_kaggle.empty:
+            df_kaggle['nganh_hang'] = 'Kaggle Dataset'
 
         cols_common = ['id', 'name', 'price', 'rating_average', 'quantity_sold', 'url', 'nen_tang', 'nganh_hang']
-        df_tiki_select = df_tiki[cols_common] if len(df_tiki) > 0 else pd.DataFrame(columns=cols_common)
-        df_shopee_select = df_shopee[cols_common] if len(df_shopee) > 0 else pd.DataFrame(columns=cols_common)
+        self.df = pd.concat([df_tiki[cols_common] if not df_tiki.empty else pd.DataFrame(columns=cols_common),
+                             df_kaggle[cols_common] if not df_kaggle.empty else pd.DataFrame(columns=cols_common)], ignore_index=True)
 
-        self.df = pd.concat([df_tiki_select, df_shopee_select], ignore_index=True)
-        self.log.info(f"   ✓ Gộp xong: {len(self.df)} sản phẩm (Tiki: {len(df_tiki)}, Shopee: {len(df_shopee)})")
+    def xu_ly(self) -> pd.DataFrame:
+        self.gop_du_lieu()
+        self.df.rename(columns={'id': 'ma_san_pham', 'name': 'ten_san_pham', 'price': 'gia', 'rating_average': 'danh_gia', 'quantity_sold': 'luot_ban'}, inplace=True)
 
-    def anh_xa_cot(self) -> pd.DataFrame:
-        if self.df is None:
-            self.gop_du_lieu()
-
-        self.log.info("📍 Bước 1: Chuẩn hóa cột...")
-        self.df.rename(columns={
-            'id': 'ma_san_pham',
-            'name': 'ten_san_pham',
-            'price': 'gia',
-            'rating_average': 'danh_gia',
-            'quantity_sold': 'luot_ban',
-        }, inplace=True)
-
-        if 'gia_goc' not in self.df.columns:
-            self.df['gia_goc'] = self.df['gia']
-        if 'ty_le_giam' not in self.df.columns:
-            self.df['ty_le_giam'] = 0
-        if 'shop' not in self.df.columns:
-            self.df['shop'] = self.df['nen_tang']
-
-        self.log.info(f"   ✓ Chuẩn hóa: {len(self.df)} dòng, {len(self.df.columns)} cột")
-        return self.df
-
-    def xu_ly_thieu_trung(self):
-        if self.df is None:
-            self.anh_xa_cot()
-
-        self.log.info("📍 Bước 2: Xử lý NULL & trùng lặp...")
-        so_dong_truoc = len(self.df)
         self.df = self.df.dropna(subset=['ma_san_pham', 'ten_san_pham', 'gia'], how='any')
-
-        self.df['danh_gia'] = self.df['danh_gia'].fillna(0)
+        self.df['danh_gia'] = self.df['danh_gia'].fillna(0).clip(0, 5)
         self.df['luot_ban'] = self.df['luot_ban'].fillna(0).astype(int)
-        self.df['ty_le_giam'] = self.df['ty_le_giam'].fillna(0)
-
-        self.df = self.df.drop_duplicates(subset=['ma_san_pham'], keep='first')
-        self.log.info(f"   ✓ Sau xử lý: {len(self.df)} dòng")
-
-    def ep_kieu_du_lieu(self):
-        if self.df is None:
-            self.xu_ly_thieu_trung()
-
-        self.log.info("📍 Bước 3: Ép kiểu dữ liệu...")
         self.df['gia'] = pd.to_numeric(self.df['gia'], errors='coerce').fillna(0)
-        self.df['danh_gia'] = self.df['danh_gia'].clip(0, 5).astype(float)
-        self.df['ty_le_giam'] = self.df['ty_le_giam'].clip(0, 1).astype(float)
-        self.df['luot_ban'] = self.df['luot_ban'].astype(int)
-
         self.df = self.df[self.df['gia'] > 0]
-        self.log.info(f"   ✓ Ép kiểu: {len(self.df)} dòng hợp lệ")
+        self.df = self.df.drop_duplicates(subset=['ma_san_pham'], keep='first')
 
-    def xu_ly_ngoai_lai(self):
-        if self.df is None:
-            self.ep_kieu_du_lieu()
+        if len(self.df) >= 2:
+            Q1, Q3 = self.df['gia'].quantile(0.25), self.df['gia'].quantile(0.75)
+            IQR = Q3 - Q1
+            ngoai_lai_iqr = (self.df['gia'] < Q1 - 1.5 * IQR) | (self.df['gia'] > Q3 + 1.5 * IQR)
+            std_gia = self.df['gia'].std()
+            ngoai_lai_z = np.abs((self.df['gia'] - self.df['gia'].mean()) / std_gia) > 3.0 if std_gia > 0 else pd.Series(False, index=self.df.index)
+            self.df['da_kiem_tra_gia_ao'] = ngoai_lai_iqr | ngoai_lai_z
+            self.nhop = self.df[self.df['da_kiem_tra_gia_ao'] == True].copy()
 
-        self.log.info("📍 Bước 4: Phát hiện ngoại lai...")
-        self.df['da_kiem_tra_gia_ao'] = False
-
-        Q1 = self.df['gia'].quantile(0.25)
-        Q3 = self.df['gia'].quantile(0.75)
-        IQR = Q3 - Q1
-        lower = Q1 - 1.5 * IQR
-        upper = Q3 + 1.5 * IQR
-        ngoai_lai_iqr = (self.df['gia'] < lower) | (self.df['gia'] > upper)
-
-        mean_gia = self.df['gia'].mean()
-        std_gia = self.df['gia'].std()
-        z_score = np.abs((self.df['gia'] - mean_gia) / (std_gia + 1e-10))
-        ngoai_lai_z = z_score > 3.0
-
-        self.df.loc[ngoai_lai_iqr | ngoai_lai_z, 'da_kiem_tra_gia_ao'] = True
-        self.nhop = self.df[self.df['da_kiem_tra_gia_ao'] == True].copy()
-        self.log.info(f"   ✓ Phát hiện {self.df['da_kiem_tra_gia_ao'].sum()} ngoại lai")
-
-    def lay_du_lieu_sach(self) -> pd.DataFrame:
-        self.anh_xa_cot()
-        self.xu_ly_thieu_trung()
-        self.ep_kieu_du_lieu()
-        self.xu_ly_ngoai_lai()
-
-        self.log.info(f"\n{'='*70}")
-        self.log.info(f"✅ DỮ LIỆU ĐÃ CHUẨN HÓA")
-        self.log.info(f"{'='*70}")
-        self.log.info(f"  📊 Tổng: {len(self.df):,}")
-        self.log.info(f"  🏪 Nền tảng: {self.df['nen_tang'].value_counts().to_dict()}")
-        self.log.info(f"{'='*70}\n")
+        logger.info(f"✅ DỮ LIỆU ĐÃ CHUẨN HÓA: Tổng {len(self.df)} dòng (Tiki: {len(self.df[self.df['nen_tang']=='Tiki'])}, Kaggle: {len(self.df[self.df['nen_tang']=='Kaggle'])})")
         return self.df
-
 
 # ============================================================================
 # SCRIPT CHÍNH
 # ============================================================================
 
 if __name__ == "__main__":
-    print("\n" + "=" * 70)
-    print("🚀 PRICEWISE v4.0 - THU THẬP TỪ TIKI & SHOPEE")
-    print("=" * 70 + "\n")
-
     logger.info("🔷 BƯỚC 1: THU THẬP TIKI")
     bot_tiki = ThuThapTiki()
-    success_tiki = bot_tiki.goi_api_tiki_multi()
-    du_lieu_tiki = bot_tiki.du_lieu_tho if success_tiki else []
+    bot_tiki.goi_api_tiki_multi()
 
-    logger.info("\n🔶 BƯỚC 2: THU THẬP SHOPEE")
-    bot_shopee = ThuThapShopee()
-    success_shopee = bot_shopee.goi_api_shopee()
-    du_lieu_shopee = bot_shopee.du_lieu_tho if success_shopee else []
+    logger.info("\n🔶 BƯỚC 2: ĐỌC KAGGLE DATASET")
+    doc_kaggle = DocKaggles(csv_path="data.csv")
+    doc_kaggle.doc_tu_csv()
 
-    logger.info("\n🧹 BƯỚC 3: LÀM SẠCH DỮ LIỆU MULTI-PLATFORM")
-    lam_sach = LamSachDuLieu(du_lieu_tiki, du_lieu_shopee)
-    df_sach = lam_sach.lay_du_lieu_sach()
+    logger.info("\n🧹 BƯỚC 3: LÀM SẠCH")
+    lam_sach = LamSachDuLieu(bot_tiki.du_lieu_tho, doc_kaggle.du_lieu_tho)
+    df_sach = lam_sach.xu_ly()
 
-    logger.info("\n💾 BƯỚC 4: XUẤT DỮ LIỆU")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    csv_file = f"dulieu_multi_v4_{timestamp}.csv"
-    df_sach.to_csv(csv_file, index=False, encoding='utf-8-sig')
-    logger.info(f"✓ CSV: {csv_file}")
-
-    json_file = f"dulieu_multi_v4_{timestamp}.json"
-    df_sach.to_json(json_file, orient='records', force_ascii=False, indent=2)
-    logger.info(f"✓ JSON: {json_file}")
-
-    logger.info("\n📋 Mẫu dữ liệu (Lấy 10 dòng cuối để thấy Shopee):")
-    print(df_sach[['ma_san_pham', 'ten_san_pham', 'nen_tang', 'nganh_hang', 'gia', 'danh_gia']].tail(10).to_string())
-
-    logger.info("\n✅ HOÀN THÀNH!")
+    df_sach.to_csv(f"dulieu_tiki_kaggle_v4.3_{timestamp}.csv", index=False, encoding='utf-8-sig')
