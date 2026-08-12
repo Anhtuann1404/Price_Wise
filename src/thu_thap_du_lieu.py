@@ -1,5 +1,5 @@
 """
-PriceWise v4.3 - Thu thập & Làm sạch Dữ liệu TMĐT (Tiki + Kaggle Dataset).
+PriceWise v4.5 - Thu thập & Làm sạch Dữ liệu TMĐT (Tiki + Kaggle Dataset).
 """
 
 import json
@@ -117,7 +117,7 @@ class ThuThapTiki:
         return len(self.du_lieu_tho) > 0
 
 # ============================================================================
-# CLASS: DocKaggles
+# CLASS: DocKaggles (FIX LỖI XÓA NHẦM DỮ LIỆU KAGGLE)
 # ============================================================================
 
 class DocKaggles:
@@ -133,17 +133,22 @@ class DocKaggles:
 
         try:
             df = pd.read_csv(self.csv_path, encoding='utf-8', on_bad_lines='skip', low_memory=False)
-            logger.info(f"   ✓ Đọc CSV: {len(df)} dòng, {len(df.columns)} cột")
 
-            # MẸO CHUẨN HÓA: Ép toàn bộ tên cột về chữ thường để tránh lỗi viết hoa/thường
+            # Ép toàn bộ tên cột về chữ thường
             df.columns = df.columns.str.strip().str.lower()
 
+            # Mở rộng mapping
             cot_map = {
                 'product_id': ['product_id', 'id', 'itemid', '_primarykey'],
                 'product_name': ['product_name', 'name', 'title'],
                 'price': ['price', 'gia', 'giá'],
-                'rating': ['rating', 'stars', 'rating_average', 'ratingstar', 'item_rating'],
-                'num_sold': ['num_sold', 'sold', 'quantity_sold', 'luot_ban', 'historicalsold', 'soldcount'],
+                'gia_goc': ['pricebeforediscount', 'original_price'],
+                'ty_le_giam': ['discount', 'discount_rate'],
+                'rating': ['ratingavg', 'rating', 'stars', 'rating_average', 'ratingstar', 'item_rating'],
+                'num_sold': ['commentcount', 'likedcount', 'num_sold', 'sold', 'quantity_sold', 'luot_ban', 'historicalsold', 'soldcount'],
+                'url': ['producturl', 'url', 'link'],
+                'shop': ['shopname', 'shop', 'store'],
+                'category': ['categories', 'category', 'nganh_hang']
             }
 
             for col_standard, col_options in cot_map.items():
@@ -152,25 +157,53 @@ class DocKaggles:
                         df.rename(columns={col_alt: col_standard}, inplace=True)
                         break
 
-            # Nếu dữ liệu thiếu cột giá, ép mặc định 50k để không bị lọc xóa mất
-            required_cols = ['product_id', 'product_name', 'price', 'rating', 'num_sold']
-            for col in required_cols:
+            # Điền giá trị mặc định nếu dataset thực sự thiếu cột
+            for col in ['product_id', 'product_name', 'url', 'shop', 'category']:
                 if col not in df.columns:
-                    df[col] = 50000 if col == 'price' else (0 if col in ['rating', 'num_sold'] else 'Unknown_Kaggle')
+                    df[col] = ''
 
-            df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(50000)
+            for col in ['price', 'gia_goc', 'ty_le_giam', 'rating', 'num_sold']:
+                if col not in df.columns:
+                    df[col] = 0
+
+            # Làm sạch dữ liệu số
+            df['ty_le_giam'] = df['ty_le_giam'].astype(str).str.replace('%', '').str.extract(r'(\d+\.?\d*)')[0]
+
+            df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(0)
+            df['gia_goc'] = pd.to_numeric(df['gia_goc'], errors='coerce').fillna(0)
+
+            # Tránh bị lọc xóa do giá = 0. Nếu giá = 0 thì lấy giá gốc, nếu vẫn = 0 thì gán 50000.
+            df['price'] = df.apply(lambda x: x['gia_goc'] if x['price'] <= 0 else x['price'], axis=1)
+            df['price'] = df['price'].apply(lambda x: 50000 if x <= 0 else x)
+
+            df['ty_le_giam'] = pd.to_numeric(df['ty_le_giam'], errors='coerce').fillna(0)
             df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(0)
             df['num_sold'] = pd.to_numeric(df['num_sold'], errors='coerce').fillna(0)
 
             self.du_lieu_tho = []
-            for _, row in df.iterrows():
+            for idx, row in df.iterrows():
                 gia = float(row['price'])
+
+                # Tránh lỗi thiếu ID và Tên gây trùng lặp rồi bị drop
+                item_id = str(row['product_id']).strip()
+                if not item_id or item_id.lower() == 'nan':
+                    item_id = f"autogen_id_{idx}"
+
+                item_name = str(row['product_name']).strip()
+                if not item_name or item_name.lower() == 'nan':
+                    item_name = f"Sản phẩm Kaggle {item_id}"
+
                 item = {
-                    'itemid': f"KG_{row['product_id']}",  # Thêm KG_ để ID không bị trùng lặp
-                    'name': str(row['product_name']),
+                    'itemid': f"KG_{item_id}",
+                    'name': item_name,
                     'price': gia * 100000 if 0 < gia < 1000 else gia,
+                    'gia_goc': float(row['gia_goc']) * 100000 if 0 < float(row['gia_goc']) < 1000 else float(row['gia_goc']),
+                    'ty_le_giam': float(row['ty_le_giam']),
                     'item_rating': {'rating_average': float(row['rating'])},
                     'sold': int(row['num_sold']),
+                    'url': str(row['url']),
+                    'shop': str(row['shop']) if str(row['shop']) else 'Kaggle Shop',
+                    'category': str(row['category'])
                 }
                 self.du_lieu_tho.append(item)
 
@@ -195,19 +228,34 @@ class LamSachDuLieu:
     def gop_du_lieu(self):
         logger.info("📊 Gộp dữ liệu Tiki + Kaggle...")
 
+        # Cấu trúc Tiki
         du_lieu_tiki_clean = [{
-            'id': str(i.get('id', '')), 'name': i.get('name', ''), 'price': float(i.get('price', 0)),
-            'rating_average': float(i.get('rating_average', 0)), 'quantity_sold': extract_quantity_sold(i.get('quantity_sold')),
-            'primary_category_path': i.get('primary_category_path', ''), 'url': f"https://tiki.vn/{i.get('url_path', '')}",
+            'id': str(i.get('id', '')),
+            'name': i.get('name', ''),
+            'price': float(i.get('price', 0)),
+            'gia_goc': float(i.get('original_price', i.get('price', 0))),
+            'ty_le_giam': float(i.get('discount_rate', 0)),
+            'rating_average': float(i.get('rating_average', 0)),
+            'quantity_sold': extract_quantity_sold(i.get('quantity_sold')),
+            'url': f"https://tiki.vn/{i.get('url_path', '')}",
+            'shop': str(i.get('current_seller', {}).get('name', 'Tiki Trading')),
+            'primary_category_path': i.get('primary_category_path', ''),
             'nen_tang': 'Tiki'
         } for i in self.du_lieu_tiki]
 
+        # Cấu trúc Kaggle
         du_lieu_kaggle_clean = [{
-            'id': str(i.get('itemid', '')), 'name': i.get('name', ''),
-            'price': float(i.get('price', 0)) / 100000 if i.get('price') and float(i.get('price')) > 10000 else float(i.get('price', 0)),
+            'id': str(i.get('itemid', '')),
+            'name': i.get('name', ''),
+            'price': float(i.get('price', 0)),
+            'gia_goc': float(i.get('gia_goc', 0)) if float(i.get('gia_goc', 0)) > 0 else float(i.get('price', 0)),
+            'ty_le_giam': float(i.get('ty_le_giam', 0)),
             'rating_average': float(i.get('item_rating', {}).get('rating_average', 0)),
-            'quantity_sold': i.get('sold', 0), 'url': f"https://kaggle.com/dataset/item-{i.get('itemid', '')}",
-            'nen_tang': 'Kaggle', 'primary_category_path': 'Kaggle Dataset'
+            'quantity_sold': i.get('sold', 0),
+            'url': i.get('url', ''),
+            'shop': i.get('shop', 'Kaggle Shop'),
+            'nen_tang': 'Kaggle',
+            'primary_category_path': i.get('category', 'Kaggle Dataset')
         } for i in self.du_lieu_kaggle]
 
         df_tiki = pd.DataFrame(du_lieu_tiki_clean)
@@ -217,15 +265,23 @@ class LamSachDuLieu:
             df_tiki['nganh_hang'] = df_tiki['primary_category_path'].apply(map_nganh_hang_tiki)
 
         if not df_kaggle.empty:
-            df_kaggle['nganh_hang'] = 'Kaggle Dataset'
+            df_kaggle['nganh_hang'] = df_kaggle['primary_category_path'].apply(map_nganh_hang_tiki)
 
-        cols_common = ['id', 'name', 'price', 'rating_average', 'quantity_sold', 'url', 'nen_tang', 'nganh_hang']
+        cols_common = ['id', 'name', 'price', 'gia_goc', 'ty_le_giam', 'rating_average', 'quantity_sold', 'url', 'shop', 'nen_tang', 'nganh_hang']
+
         self.df = pd.concat([df_tiki[cols_common] if not df_tiki.empty else pd.DataFrame(columns=cols_common),
                              df_kaggle[cols_common] if not df_kaggle.empty else pd.DataFrame(columns=cols_common)], ignore_index=True)
 
     def xu_ly(self) -> pd.DataFrame:
         self.gop_du_lieu()
-        self.df.rename(columns={'id': 'ma_san_pham', 'name': 'ten_san_pham', 'price': 'gia', 'rating_average': 'danh_gia', 'quantity_sold': 'luot_ban'}, inplace=True)
+
+        self.df.rename(columns={
+            'id': 'ma_san_pham',
+            'name': 'ten_san_pham',
+            'price': 'gia',
+            'rating_average': 'danh_gia',
+            'quantity_sold': 'luot_ban'
+        }, inplace=True)
 
         self.df = self.df.dropna(subset=['ma_san_pham', 'ten_san_pham', 'gia'], how='any')
         self.df['danh_gia'] = self.df['danh_gia'].fillna(0).clip(0, 5)
@@ -256,7 +312,8 @@ if __name__ == "__main__":
     bot_tiki.goi_api_tiki_multi()
 
     logger.info("\n🔶 BƯỚC 2: ĐỌC KAGGLE DATASET")
-    doc_kaggle = DocKaggles(csv_path="data.csv")
+    # Đã cập nhật trỏ đúng vào thư mục data
+    doc_kaggle = DocKaggles(csv_path="../data/data.csv")
     doc_kaggle.doc_tu_csv()
 
     logger.info("\n🧹 BƯỚC 3: LÀM SẠCH")
@@ -264,4 +321,5 @@ if __name__ == "__main__":
     df_sach = lam_sach.xu_ly()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    df_sach.to_csv(f"dulieu_tiki_kaggle_v4.3_{timestamp}.csv", index=False, encoding='utf-8-sig')
+    # Đã cập nhật lưu file mới vào thư mục data
+    df_sach.to_csv(f"../data/dulieu_tiki_kaggle_v4.5_{timestamp}.csv", index=False, encoding='utf-8-sig')
