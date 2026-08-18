@@ -93,12 +93,12 @@ NGANH_HANG_MAPPING = {
 
 # Mã ngành phổ biến (để gọi API) - Đã thay thế ID cũ bị lỗi
 NGANH_HANG_THU_TAP = [
-    ("8322", "Sách tiếng Việt", 5),              # 5 trang = ~200 sản phẩm
-    ("1084", "Truyện tranh/Manga", 4),           # 4 trang = ~160 sản phẩm
-    ("1789", "Điện thoại - Máy tính bảng", 4),   # 4 trang = ~160 sản phẩm
-    ("915", "Thời trang nam", 3),                # 3 trang = ~120 sản phẩm
-    ("1520", "Làm đẹp - Sức khỏe", 4),           # 4 trang = ~160 sản phẩm
-    ("1883", "Nhà cửa - Đời sống", 3),           # 3 trang = ~120 sản phẩm
+    ("8322", "Sách tiếng Việt", 10),              # 5 trang = ~200 sản phẩm
+    ("1084", "Truyện tranh/Manga", 10),           # 4 trang = ~160 sản phẩm
+    ("1789", "Điện thoại - Máy tính bảng", 10),   # 4 trang = ~160 sản phẩm
+    ("915", "Thời trang nam", 10),                # 3 trang = ~120 sản phẩm
+    ("1520", "Làm đẹp - Sức khỏe", 10),           # 4 trang = ~160 sản phẩm
+    ("1883", "Nhà cửa - Đời sống", 10),           # 3 trang = ~120 sản phẩm
 ]
 
 # Endpoint constants

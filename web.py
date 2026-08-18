@@ -162,6 +162,11 @@ def main():
 
     danh_sach_nganh = df_ml['nganh_hang'].unique().tolist()
 
+    # Chỉ giữ ngành hàng có đủ sản phẩm để trợ lý gợi ý được (tránh chọn xong ra rỗng)
+    so_luong_theo_nganh = df_ml['nganh_hang'].value_counts()
+    NGUONG_TOI_THIEU = 3
+    nganh_du_du_lieu = [n for n in danh_sach_nganh if so_luong_theo_nganh[n] >= NGUONG_TOI_THIEU]
+
     # ------------------------------------------------------------------
     # TAB 1: TỔNG QUAN & THỐNG KÊ 
     # ------------------------------------------------------------------
@@ -260,7 +265,11 @@ def main():
         st.markdown("### 🤖 Trợ lý phân tích & Gợi ý sản phẩm thông minh")
         col_input1, col_input2 = st.columns(2)
         with col_input1:
-            nganh_hang_tu_van = st.selectbox("Ngành hàng bạn quan tâm:", danh_sach_nganh)
+            nhan_nganh = {
+                f"{n} ({so_luong_theo_nganh[n]} sản phẩm)": n for n in nganh_du_du_lieu
+            }
+            lua_chon_hien_thi = st.selectbox("Ngành hàng bạn quan tâm:", list(nhan_nganh.keys()))
+            nganh_hang_tu_van = nhan_nganh[lua_chon_hien_thi]
         with col_input2:
             ngan_sach_tu_van = st.number_input(
                 "Ngân sách dự kiến (VNĐ):", min_value=10_000, max_value=100_000_000,

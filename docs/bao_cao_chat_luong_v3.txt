@@ -2,59 +2,60 @@ BÁO CÁO CHẤT LƯỢNG DỮ LIỆU - PriceWise v3.0
 ======================================================================
 
 1. THỐNG KÊ CHUNG
-   Tổng sản phẩm: 818
+   Tổng sản phẩm: 2,026
    Số cột: 11
-   Ngành hàng: 25
+   Ngành hàng: 26
    Shop: 1
 
 2. THỐNG KÊ GIÁ
-   Min: 7,900 đ
+   Min: 3,750 đ
    Max: 40,990,000 đ
-   Trung bình: 1,364,701 đ
-   Trung vị: 138,800 đ
-   Std: 4,187,245 đ
+   Trung bình: 651,842 đ
+   Trung vị: 131,250 đ
+   Std: 2,502,512 đ
 
 3. THỐNG KÊ LƯỢT BÁN
    Min: 0
-   Max: 578294
-   Trung bình: 5827.0
-   Trung vị: 161
+   Max: 578888
+   Trung bình: 3048.1
+   Trung vị: 72
 
 4. THỐNG KÊ ĐÁNH GIÁ
-   Trung bình: 3.97 ⭐
+   Trung bình: 3.82 ⭐
    Min: 0.0
    Max: 5.0
 
 5. NGOẠI LAI PHÁT HIỆN
-   Số sản phẩm: 127
-   Tỷ lệ: 15.5%
+   Số sản phẩm: 224
+   Tỷ lệ: 11.1%
 
 6. TOP 10 SHOP (THEO SỐ LƯỢNG)
-   Tiki: 818 sản phẩm
+   Tiki: 2026 sản phẩm
 
 7. PHÂN BỐ THEO NGÀNH HÀNG
-   Làm đẹp - Sức khỏe: 160 sản phẩm (19.6%)
-   Truyện tranh/Manga: 160 sản phẩm (19.6%)
-   Nhà cửa - Đời sống: 120 sản phẩm (14.7%)
-   Thời trang nam: 120 sản phẩm (14.7%)
-   Điện thoại - Máy tính bảng: 116 sản phẩm (14.2%)
-   Sách ngoại văn: 40 sản phẩm (4.9%)
-   Tô màu - Luyện chữ: 25 sản phẩm (3.1%)
-   Tẩy rửa mặt: 11 sản phẩm (1.3%)
-   Nước hoa: 10 sản phẩm (1.2%)
-   Sách thiếu nhi: 10 sản phẩm (1.2%)
-   Đồ chơi thương hiệu: 7 sản phẩm (0.9%)
-   Vitamin & Thực phẩm bổ sung: 6 sản phẩm (0.7%)
-   Đồ chơi học tập: 6 sản phẩm (0.7%)
-   Máy massage: 5 sản phẩm (0.6%)
-   Sản phẩm cho bé: 5 sản phẩm (0.6%)
-   Chăm sóc cơ thể: 3 sản phẩm (0.4%)
-   Nệm & Gối: 3 sản phẩm (0.4%)
-   Chăm sóc da: 2 sản phẩm (0.2%)
-   Kem dưỡng ẩm: 2 sản phẩm (0.2%)
-   Mỹ phẩm (Cũ): 2 sản phẩm (0.2%)
-   Dụng cụ làm đẹp: 1 sản phẩm (0.1%)
-   Mặt nạ/Serum: 1 sản phẩm (0.1%)
-   Thiết bị nhà bếp: 1 sản phẩm (0.1%)
-   Thiết bị phòng tắm: 1 sản phẩm (0.1%)
-   Đèn chiếu sáng: 1 sản phẩm (0.1%)
+   Làm đẹp - Sức khỏe: 400 sản phẩm (19.7%)
+   Nhà cửa - Đời sống: 400 sản phẩm (19.7%)
+   Thời trang nam: 400 sản phẩm (19.7%)
+   Truyện tranh/Manga: 400 sản phẩm (19.7%)
+   Sách ngoại văn: 123 sản phẩm (6.1%)
+   Điện thoại - Máy tính bảng: 116 sản phẩm (5.7%)
+   Tô màu - Luyện chữ: 53 sản phẩm (2.6%)
+   Tẩy rửa mặt: 17 sản phẩm (0.8%)
+   Nước hoa: 15 sản phẩm (0.7%)
+   Sách thiếu nhi: 14 sản phẩm (0.7%)
+   Đồ chơi thương hiệu: 13 sản phẩm (0.6%)
+   Sản phẩm cho bé: 10 sản phẩm (0.5%)
+   Vitamin & Thực phẩm bổ sung: 10 sản phẩm (0.5%)
+   Chăm sóc da: 9 sản phẩm (0.4%)
+   Máy massage: 9 sản phẩm (0.4%)
+   Đồ chơi học tập: 7 sản phẩm (0.3%)
+   Chăm sóc cơ thể: 5 sản phẩm (0.2%)
+   Kem dưỡng ẩm: 4 sản phẩm (0.2%)
+   Mỹ phẩm (Cũ): 4 sản phẩm (0.2%)
+   Đèn chiếu sáng: 4 sản phẩm (0.2%)
+   Nệm & Gối: 3 sản phẩm (0.1%)
+   Sách tiếng Việt: 3 sản phẩm (0.1%)
+   Dụng cụ làm đẹp: 2 sản phẩm (0.1%)
+   Mặt nạ/Serum: 2 sản phẩm (0.1%)
+   Thiết bị phòng tắm: 2 sản phẩm (0.1%)
+   Thiết bị nhà bếp: 1 sản phẩm (0.0%)
