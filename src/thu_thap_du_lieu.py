@@ -1,15 +1,19 @@
 """
-PriceWise v3.0 - Thu thập & Làm sạch Dữ liệu TMĐT từ Tiki.
+PriceWise v4.5 - Thu thập & Làm sạch Dữ liệu TMĐT từ Tiki + Kaggle.
 
 🔄 Cập nhật chính:
-  ✅ Mở rộng: 1000+ sản phẩm từ 3-4 ngành hàng
+  ✅ Mở rộng: 2000+ sản phẩm từ Tiki (8 ngành) + Kaggle CSV
   ✅ Fix luot_ban: Parse dict {"text": "Đã bán X", "value": X} → số
-  ✅ Fix nganh_hang: Map ID → Tên tiếng Việt (Ưu tiên danh mục con)
-  ✅ Fix shop: Gán cứng "Tiki" (do giới hạn endpoint API)
-  ✅ Tối ưu: Thêm Health-check, retry logic, logging chi tiết
+  ✅ Fix nganh_hang: UU TIEN MA GOC (parent category) trước, sau đó QUÉT NGƯỢC
+  ✅ Fix shop: Xử lý `current_seller=None` → fallback "Tiki"
+  ✅ Thêm safe_float: Chống sập khi ép kiểu
+  ✅ Thêm class DocKaggles: Đọc CSV Kaggle (fix 5 lỗi)
+  ✅ Thêm xu_ly_gop_du_lieu: Đồng bộ 10 cột chung
+  ✅ Tối ưu: Health-check, retry logic, logging chi tiết
 
 Cấu trúc:
-  - ThuThapDuLieu: Thu thập từ API (multi-category, retry logic)
+  - ThuThapDuLieu: Thu thập từ API Tiki (multi-category, retry logic)
+  - DocKaggles: Đọc + làm sạch CSV Kaggle
   - LamSachDuLieu: Làm sạch (extract, ép kiểu, phát hiện ngoại lai)
 """
 
@@ -24,7 +28,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 from collections import Counter
 
-
 # ============================================================================
 # LOGGING & CONFIGURATION
 # ============================================================================
@@ -36,8 +39,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# CATEGORY MAPPING - CẤU TRÚC PHÂN CẤP
+# ============================================================================
 
-# Dictionary map: Mã ngành Tiki → Tên tiếng Việt (Đã cập nhật mã mới)
+# ⭐ BƯỚC 1: Ánh xạ MÃ GỐC (Parent Category) → Tên họ ngành chính
+NGANH_HANG_PARENT = {
+    "8322": "Sách tiếng Việt",
+    "316": "Sách ngoại văn",
+    "1084": "Truyện tranh/Manga",
+    "67998": "Sách thiếu nhi",
+    "1789": "Điện thoại - Máy tính bảng",
+    "915": "Thời trang nam",
+    "931": "Thời trang nữ",
+    "1520": "Làm đẹp - Sức khỏe",
+    "1883": "Nhà cửa - Đời sống",
+}
+
+# ⭐ BƯỚC 2: Dictionary chi tiết - chỉ dùng nếu mã gốc không khớp
 NGANH_HANG_MAPPING = {
     # Sách
     "8322": "Sách tiếng Việt",
@@ -91,27 +110,72 @@ NGANH_HANG_MAPPING = {
     "67915": "Nệm & Gối",
 }
 
-# Mã ngành phổ biến (để gọi API) - Đã thay thế ID cũ bị lỗi
+# Mã ngành phổ biến (để gọi API) - 8 ngành × 15 trang = 2000+ sản phẩm
 NGANH_HANG_THU_TAP = [
-    ("8322", "Sách tiếng Việt", 15),              # 15 trang = ~600 sản phẩm
-    ("1084", "Truyện tranh/Manga", 15),           # 15 trang = ~600 sản phẩm
-    ("1789", "Điện thoại - Máy tính bảng", 15),   # 15 trang = ~600 sản phẩm
-    ("915", "Thời trang nam", 15),                # 15 trang = ~600 sản phẩm
-    ("1520", "Làm đẹp - Sức khỏe", 15),           # 15 trang = ~600 sản phẩm
-    ("1883", "Nhà cửa - Đời sống", 15),           # 15 trang = ~600 sản phẩm
-    ("3", "Laptop", 15),                          # 15 trang = ~600 sản phẩm
-    ("385", "Mỹ phẩm", 15),                       # 15 trang = ~600 sản phẩm
+    ("8322", "Sách tiếng Việt", 15),  # 15 trang = ~600 sản phẩm
+    ("1084", "Truyện tranh/Manga", 15),  # 15 trang = ~600 sản phẩm
+    ("1789", "Điện thoại - Máy tính bảng", 15),  # 15 trang = ~600 sản phẩm
+    ("915", "Thời trang nam", 15),  # 15 trang = ~600 sản phẩm
+    ("1520", "Làm đẹp - Sức khỏe", 15),  # 15 trang = ~600 sản phẩm
+    ("1883", "Nhà cửa - Đời sống", 15),  # 15 trang = ~600 sản phẩm
+    ("3", "Laptop", 15),  # 15 trang = ~600 sản phẩm
+    ("385", "Mỹ phẩm", 15),  # 15 trang = ~600 sản phẩm
 ]
 # Tính toán: 15 trang × 40 sản phẩm × 8 ngành = 4800 sản phẩm thô
-# Sau khi loại bỏ trùng lặp → ~2000-2400+ sản phẩm thực tế (dư sức vượt mốc 2000)
+# Sau khi loại bỏ trùng lặp → ~2000-2400+ sản phẩm thực tế
 
 # Endpoint constants
 TIKI_API_BASE = "https://tiki.vn/api/personalish/v1/blocks/listings"
+
+# Danh sách cột chuẩn (được định nghĩa chung cho tất cả nguồn)
+cols_common = [
+    'ma_san_pham',  # Product ID (product_id)
+    'ten_san_pham',  # Product name (name)
+    'gia',  # Current price (price)
+    'gia_goc',  # Original price (list_price)
+    'ty_le_giam',  # Discount ratio (0 - 1)
+    'luot_ban',  # Quantity sold (quantity_sold)
+    'danh_gia',  # Rating (rating_average)
+    'nganh_hang',  # Category (category_id hoặc category)
+    'nen_tang',  # Platform (always "Tiki" hoặc "Kaggle")
+    'shop',  # Shop name (seller)
+]
 
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
+def safe_float(value, default: float = 0.0) -> float:
+    """
+    ✅ An toàn ép kiểu sang float. Chống sập khi value là None/NaN/string lạ.
+
+    Args:
+        value: Giá trị cần chuyển đổi
+        default: Giá trị mặc định nếu không thể chuyển
+
+    Returns:
+        float: Kết quả chuyển đổi hoặc default
+    """
+    try:
+        if value is None or pd.isna(value):
+            return default
+
+        # Nếu là string, xóa khoảng trắng & ký tự không cần thiết
+        if isinstance(value, str):
+            value = value.strip().replace('đ', '').replace(',', '')
+
+        # Cố gắng ép kiểu
+        result = float(value)
+
+        # Kiểm tra NaN
+        if pd.isna(result):
+            return default
+
+        return result
+    except (ValueError, TypeError, AttributeError):
+        return default
+
 
 def extract_quantity_sold(value) -> int:
     """
@@ -140,19 +204,41 @@ def extract_quantity_sold(value) -> int:
 
 
 def map_nganh_hang(category_path) -> str:
-    """Map chuỗi path mã ngành → Tên tiếng Việt (Ưu tiên danh mục con)."""
+    """
+    ⭐ FIX v4.5: Map chuỗi path mã ngành → Tên tiếng Việt.
+
+    LOGIC:
+      BƯỚC 1: Ưu tiên kiểm tra MÃ GỐC (phần tử đầu path) trong NGANH_HANG_PARENT
+              → Xác định "họ ngành" chính (VD: 8322 → "Sách tiếng Việt")
+
+      BƯỚC 2: Nếu mã gốc không khớp, QUÉT NGƯỢC từ chi tiết nhất lên
+              → reversed(ids) để ưu tiên mã con cụ thể hơn mã cha
+              → Tránh nhầm lẫn: "1/2/3" sẽ check 3 → 2 → 1 (không check 1 trước)
+
+      BƯỚC 3: Nếu không có mã nào khớp → fallback
+    """
     if not category_path or pd.isna(category_path):
         return "Chưa phân loại"
 
     # Tách chuỗi path thành danh sách các mã ID
     ids = str(category_path).split('/')
 
-    # ✅ FIX: Quét ngược từ danh mục chi tiết nhất lên danh mục gốc
+    # Lấy mã gốc (phần tử đầu tiên)
+    ma_goc = ids[0] if ids else None
+
+    # ✅ BƯỚC 1: Kiểm tra MÃ GỐC trong NGANH_HANG_PARENT
+    # Nếu khớp → xác định chắc chắn họ ngành, không cần tra thêm
+    if ma_goc and ma_goc in NGANH_HANG_PARENT:
+        return NGANH_HANG_PARENT[ma_goc]
+
+    # ✅ BƯỚC 2: Quét NGƯỢC từ chi tiết nhất lên (reversed)
+    # Tránh nhầm lẫn VD: Path "1/123/456" sẽ check 456 → 123 → 1
+    # Không bao giờ trả "Điện thoại (Cũ)" vì chưa khi nào check ID "1" trước
     for cat_id in reversed(ids):
         if cat_id in NGANH_HANG_MAPPING:
             return NGANH_HANG_MAPPING[cat_id]
 
-    # Nếu xui lắm không có mã nào khớp, mới lấy mã cuối cùng
+    # ✅ BƯỚC 3: Fallback - không tìm thấy mapping nào
     return f"Ngành {ids[-1]}"
 
 
@@ -172,8 +258,8 @@ class ThuThapDuLieu:
         self.du_lieu_tho = []
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                         'AppleWebKit/537.36 (KHTML, like Gecko) '
-                         'Chrome/120.0.0.0 Safari/537.36'
+                          'AppleWebKit/537.36 (KHTML, like Gecko) '
+                          'Chrome/120.0.0.0 Safari/537.36'
         }
         self.max_retries = max_retries
         self.timeout = timeout
@@ -249,9 +335,8 @@ class ThuThapDuLieu:
             logger.error(f"❌ Health-check FAIL: {type(e).__name__}: {e}")
             return False
 
-
     def goi_api_tiki_multi(self, nganh_hang_list: List[Tuple[str, str, int]] = None,
-                          delay: float = 1.5) -> bool:
+                           delay: float = 1.5) -> bool:
         """
         Gọi API Tiki để lấy dữ liệu từ nhiều ngành hàng.
         """
@@ -285,7 +370,7 @@ class ThuThapDuLieu:
                     tong_sp += len(data)
 
                     logger.info(f"   ✓ Trang {page}: {len(data)} sản phẩm | "
-                               f"Tổng ngành: {sp_nganh} | Tổng chung: {tong_sp}")
+                                f"Tổng ngành: {sp_nganh} | Tổng chung: {tong_sp}")
 
                     if page < so_trang:
                         time.sleep(delay)
@@ -309,18 +394,23 @@ class ThuThapDuLieu:
         self.du_lieu_tho = du_lieu_unique
         tong_sau = len(self.du_lieu_tho)
 
-        logger.info(f"\n{'='*70}")
+        logger.info(f"\n{'=' * 70}")
         logger.info(f"✅ HOÀN THÀNH THU THẬP")
         logger.info(f"   • Tổng sản phẩm (trước loại trùng): {tong_truoc}")
         logger.info(f"   • Tổng sản phẩm (sau loại trùng): {tong_sau}")
         logger.info(f"   • Sản phẩm bị trùng: {tong_truoc - tong_sau}")
-        logger.info(f"{'='*70}")
+        logger.info(f"{'=' * 70}")
 
         # ✅ Lấy được bao nhiêu giữ bấy nhiêu
         return tong_sau > 0
 
     def _call_api_with_retry(self, ma_nganh: str, page: int) -> Tuple[bool, List]:
-        """    Gọi API Tiki với retry logic.    Returns: (success, data_list)    """
+        """
+        Gọi API Tiki với retry logic.
+
+        Returns:
+            (success, data_list)
+        """
         for attempt in range(1, self.max_retries + 1):
             try:
                 url = (
@@ -418,6 +508,115 @@ class ThuThapDuLieu:
 
 
 # ============================================================================
+# CLASS: DocKaggles
+# ============================================================================
+
+class DocKaggles:
+    """
+    ✅ Đọc & làm sạch CSV từ Kaggle.
+
+    FIX 5 LỖI:
+      1. ✅ Giá gốc missing: Dùng `price` làm fallback
+      2. ✅ Tỷ lệ giảm: Tính từ (price_max - price) / price_max
+      3. ✅ Tên shop: Xử lý `None` → "Kaggle"
+      4. ✅ Đánh giá/Lượt bán: Parse từ các cột khác nhau
+      5. ✅ URL: Xây dựng từ slug nếu không có URL trực tiếp
+    """
+
+    def __init__(self, duong_dan_csv: str):
+        """
+        Args:
+            duong_dan_csv: Đường dẫn file CSV Kaggle
+        """
+        self.duong_dan = duong_dan_csv
+        self.du_lieu_tho = []
+        self.log = logger
+
+    def doc_va_lam_sach(self) -> List[Dict]:
+        """
+        Đọc CSV Kaggle, chuẩn hóa schema.
+
+        Returns:
+            Danh sách dict đã chuẩn hóa
+        """
+        try:
+            df = pd.read_csv(self.duong_dan, encoding='utf-8')
+            self.log.info(f"📖 Đọc Kaggle CSV: {len(df)} dòng, {len(df.columns)} cột")
+
+            rows = []
+            for idx, row in df.iterrows():
+                try:
+                    # Cột ID (yêu cầu)
+                    ma_sp = str(row.get('id', row.get('product_id', idx))).strip()
+                    ten_sp = str(row.get('name', row.get('title', ''))).strip()
+
+                    if not ma_sp or not ten_sp:
+                        self.log.warning(f"   ⚠ Dòng {idx}: Thiếu ID hoặc tên, bỏ qua")
+                        continue
+
+                    # ✅ FIX 1: Giá gốc missing
+                    gia = safe_float(row.get('price', 0))
+                    gia_goc = safe_float(row.get('original_price', row.get('list_price', gia)))
+                    if gia_goc == 0:
+                        gia_goc = gia
+
+                    # ✅ FIX 2: Tỷ lệ giảm
+                    if gia_goc > 0 and gia <= gia_goc:
+                        ty_le_giam = 1.0 - (gia / gia_goc)
+                    else:
+                        ty_le_giam = 0.0
+
+                    # ✅ FIX 3: Tên shop (xử lý None)
+                    shop = str(row.get('seller', row.get('shop', ''))).strip()
+                    if not shop or shop == 'nan' or shop.lower() == 'none':
+                        shop = 'Kaggle'
+
+                    # ✅ FIX 4: Đánh giá & Lượt bán
+                    danh_gia = safe_float(row.get('rating', row.get('rating_average', 0)))
+                    luot_ban = int(safe_float(row.get('reviews', row.get('quantity_sold', 0))))
+
+                    # Ngành hàng
+                    nganh = str(row.get('category', row.get('nganh_hang', 'Chưa phân loại'))).strip()
+
+                    # ✅ FIX 5: URL thật
+                    url = str(row.get('url', '')).strip()
+                    if not url:
+                        slug = str(row.get('slug', '')).strip()
+                        if slug:
+                            url = f"https://kaggle.com/product/{slug}"
+
+                    item = {
+                        'id': ma_sp,
+                        'name': ten_sp,
+                        'price': gia,
+                        'list_price': gia_goc,
+                        'discount_rate': ty_le_giam * 100,
+                        'quantity_sold': luot_ban,
+                        'rating_average': danh_gia,
+                        'category_id': nganh,
+                        'seller': shop,
+                        'url': url,
+                        'platform': 'Kaggle',  # Đánh dấu nguồn
+                    }
+                    rows.append(item)
+
+                except Exception as e:
+                    self.log.warning(f"   ⚠ Dòng {idx}: {type(e).__name__}, bỏ qua")
+                    continue
+
+            self.du_lieu_tho = rows
+            self.log.info(f"✓ Làm sạch Kaggle CSV: {len(self.du_lieu_tho)} sản phẩm hợp lệ")
+            return self.du_lieu_tho
+
+        except FileNotFoundError:
+            self.log.error(f"❌ File không tìm thấy: {self.duong_dan}")
+            return []
+        except Exception as e:
+            self.log.error(f"❌ Lỗi đọc Kaggle CSV: {type(e).__name__}: {e}")
+            return []
+
+
+# ============================================================================
 # CLASS: LamSachDuLieu
 # ============================================================================
 
@@ -458,17 +657,29 @@ class LamSachDuLieu:
         # Ngành hàng - Đã fix ở đây để truyền category path
         if 'primary_category_path' in df.columns:
             schema_moi['nganh_hang'] = df['primary_category_path'].apply(map_nganh_hang)
+        elif 'category_id' in df.columns:
+            schema_moi['nganh_hang'] = df['category_id'].apply(map_nganh_hang)
         else:
             schema_moi['nganh_hang'] = 'Chưa phân loại'
 
-        # ✅ Shop: API /blocks/listings không cung cấp thông tin seller
-        # Tất cả sản phẩm được ghi nhận từ "Tiki" vì giới hạn endpoint
-        # (Để lấy seller thực tế, cần gọi API chi tiết sản phẩm - không khả thi vì bị rate limit)
-        schema_moi['shop'] = 'Tiki'
+        # ✅ FIX: Shop - Xử lý khi current_seller = None
+        if 'current_seller' in df.columns:
+            schema_moi['shop'] = df['current_seller'].fillna('Tiki').astype(str)
+            schema_moi['shop'] = schema_moi['shop'].apply(
+                lambda x: 'Tiki' if (not x or x == 'nan' or x.lower() == 'none') else x
+            )
+        elif 'seller' in df.columns:
+            schema_moi['shop'] = df['seller'].fillna('Tiki').astype(str)
+            schema_moi['shop'] = schema_moi['shop'].apply(
+                lambda x: 'Tiki' if (not x or x == 'nan' or x.lower() == 'none') else x
+            )
+        else:
+            schema_moi['shop'] = 'Tiki'
 
         # Giá
         gia_col = df['price'] if 'price' in df.columns else df.get('gia', 0)
         schema_moi['gia'] = pd.to_numeric(gia_col, errors='coerce').fillna(0)
+        schema_moi['gia'] = schema_moi['gia'].apply(lambda x: safe_float(x))
 
         # Giá gốc
         if 'original_price' in df.columns:
@@ -482,10 +693,12 @@ class LamSachDuLieu:
         else:
             schema_moi['gia_goc'] = schema_moi['gia']
 
+        schema_moi['gia_goc'] = schema_moi['gia_goc'].apply(lambda x: safe_float(x))
+
         # Tỷ lệ giảm
         if 'discount_rate' in df.columns:
             schema_moi['ty_le_giam'] = (
-                pd.to_numeric(df['discount_rate'], errors='coerce').fillna(0) / 100
+                    pd.to_numeric(df['discount_rate'], errors='coerce').fillna(0) / 100
             )
         else:
             gia_goc = schema_moi['gia_goc'].values
@@ -508,6 +721,13 @@ class LamSachDuLieu:
         schema_moi['danh_gia'] = pd.to_numeric(
             df.get('rating_average', 0), errors='coerce'
         ).fillna(0)
+        schema_moi['danh_gia'] = schema_moi['danh_gia'].apply(lambda x: safe_float(x))
+
+        # Platform
+        if 'platform' in df.columns:
+            schema_moi['nen_tang'] = df['platform']
+        else:
+            schema_moi['nen_tang'] = 'Tiki'
 
         # URL
         if 'url_path' in df.columns:
@@ -600,6 +820,43 @@ class LamSachDuLieu:
         self.log.info(f"   ✓ Phát hiện {so_ngoai_lai} ngoại lai ({phan_tram:.1f}%)")
         self.nhop = self.df[self.df['da_kiem_tra_gia_ao'] == True].copy()
 
+    def xu_ly_gop_du_lieu(self, list_dataframes: List[pd.DataFrame]) -> pd.DataFrame:
+        """
+        ✅ Gộp dữ liệu từ nhiều nguồn (Tiki + Kaggle) → đồng bộ 10 cột.
+
+        Args:
+            list_dataframes: Danh sách DataFrame từ các nguồn khác nhau
+
+        Returns:
+            DataFrame đã gộp với 10 cột chuẩn
+        """
+        self.log.info("📍 Bước 0 (Gộp): Gộp dữ liệu từ nhiều nguồn...")
+
+        if not list_dataframes or len(list_dataframes) == 0:
+            self.log.warning("   ⚠ Không có DataFrame để gộp")
+            return pd.DataFrame()
+
+        # Gộp tất cả DataFrame
+        df_gop = pd.concat(list_dataframes, ignore_index=True)
+        self.log.info(f"   • Tổng dòng sau gộp: {len(df_gop)}")
+
+        # Đảm bảo đủ 10 cột chuẩn
+        for col in cols_common:
+            if col not in df_gop.columns:
+                if col == 'nen_tang':
+                    df_gop[col] = 'Chưa xác định'
+                elif col in ['gia', 'gia_goc', 'ty_le_giam', 'luot_ban', 'danh_gia']:
+                    df_gop[col] = 0
+                else:
+                    df_gop[col] = ''
+
+        # Chọn và sắp xếp lại 10 cột
+        df_gop = df_gop[cols_common]
+        self.log.info(f"   ✓ Gộp thành công: {len(df_gop)} dòng, {len(df_gop.columns)} cột")
+
+        self.df = df_gop
+        return self.df
+
     def lay_du_lieu_sach(self) -> pd.DataFrame:
         """Chạy toàn bộ quy trình làm sạch."""
         if self.df is None:
@@ -609,30 +866,32 @@ class LamSachDuLieu:
         self.ep_kieu_du_lieu()
         self.xu_ly_ngoai_lai_va_gan_co()
 
-        self.log.info(f"\n{'='*70}")
+        self.log.info(f"\n{'=' * 70}")
         self.log.info(f"✅ DỮ LIỆU ĐÃ CHUẨN HÓA HOÀN TOÀN")
-        self.log.info(f"{'='*70}")
+        self.log.info(f"{'=' * 70}")
         self.log.info(f"  📊 Tổng sản phẩm: {len(self.df):,}")
         self.log.info(f"  📚 Ngành hàng: {self.df['nganh_hang'].nunique()} loại")
         self.log.info(f"  🏪 Shop: {self.df['shop'].nunique()} shop")
-        self.log.info(f"  💰 Giá: {self.df['gia'].min():,.0f} - {self.df['gia'].max():,.0f} đ (TB: {self.df['gia'].mean():,.0f} đ)")
+        self.log.info(
+            f"  💰 Giá: {self.df['gia'].min():,.0f} - {self.df['gia'].max():,.0f} đ (TB: {self.df['gia'].mean():,.0f} đ)")
         self.log.info(f"  ⭐ Đánh giá: {self.df['danh_gia'].mean():.2f}")
-        self.log.info(f"  🚩 Ngoại lai: {self.df['da_kiem_tra_gia_ao'].sum()} ({self.df['da_kiem_tra_gia_ao'].sum()/len(self.df)*100:.1f}%)")
-        self.log.info(f"{'='*70}\n")
+        self.log.info(
+            f"  🚩 Ngoại lai: {self.df['da_kiem_tra_gia_ao'].sum()} ({self.df['da_kiem_tra_gia_ao'].sum() / len(self.df) * 100:.1f}%)")
+        self.log.info(f"{'=' * 70}\n")
         return self.df
 
     def lay_ngoai_lai(self) -> pd.DataFrame:
         """Trả về DataFrame chứa sản phẩm ngoại lai."""
         return self.nhop
 
-    def xuat_bao_cao_chat_luong(self, ten_file: str = "bao_cao_chat_luong_v3.txt"):
+    def xuat_bao_cao_chat_luong(self, ten_file: str = "bao_cao_chat_luong_v4.txt"):
         """Xuất báo cáo chất lượng chi tiết."""
         if self.df is None:
             self.log.error("❌ Chưa có dữ liệu")
             return
 
         with open(ten_file, 'w', encoding='utf-8') as f:
-            f.write("BÁO CÁO CHẤT LƯỢNG DỮ LIỆU - PriceWise v3.0\n")
+            f.write("BÁO CÁO CHẤT LƯỢNG DỮ LIỆU - PriceWise v4.5\n")
             f.write("=" * 70 + "\n\n")
 
             f.write("1. THỐNG KÊ CHUNG\n")
@@ -677,48 +936,94 @@ class LamSachDuLieu:
 
         self.log.info(f"✓ Báo cáo: {ten_file}")
 
-
 # ============================================================================
 # SCRIPT CHÍNH
 # ============================================================================
 
 if __name__ == "__main__":
     print("\n" + "=" * 70)
-    print("🚀 PRICEWISE v3.0 - THU THẬP & LÀM SẠCH DỮ LIỆU TIKI")
+    print("🚀 PRICEWISE v4.5 - THU THẬP & LÀM SẠCH DỮ LIỆU TIKI + KAGGLE")
     print("=" * 70 + "\n")
 
-    # ==================== OPTION 1: GỌI API ====================
-    logger.info("🌐 Gọi API Tiki...")
-    bot = ThuThapDuLieu()
-    success = bot.goi_api_tiki_multi()
-    if success:
-        bot.luu_du_lieu("../data/dulieu_tiki_1000sp")
-        lam_sach = LamSachDuLieu(bot.du_lieu_tho)
-    else:
-        logger.warning("❌ API gọi không thành công. Dùng CSV hiện có.\n")
-        bot = ThuThapDuLieu()
-        bot.doc_csv("../data/dulieu_nhasach_tiki.csv")
-        lam_sach = LamSachDuLieu(bot.du_lieu_tho)
+    # ==================== OPTION 1: GỌI API TIKI ====================
+    logger.info("🌐 Thu thập từ Tiki...")
+    bot_tiki = ThuThapDuLieu()
+    success_tiki = bot_tiki.goi_api_tiki_multi()
 
-    # ==================== LÀM SẠCH ====================
-    logger.info("\n🧹 Bắt đầu làm sạch dữ liệu...\n")
-    df_sach = lam_sach.lay_du_lieu_sach()
+    if success_tiki:
+        bot_tiki.luu_du_lieu("../data/dulieu_tiki_2000sp")
+        du_lieu_tiki = bot_tiki.du_lieu_tho
+        logger.info(f"✓ Tiki: {len(du_lieu_tiki)} sản phẩm")
+    else:
+        logger.warning("❌ API Tiki gọi không thành công. Thử dùng CSV hiện có...")
+        bot_tiki = ThuThapDuLieu()
+        # Thay tên file backup của cậu vào đây nếu cần
+        success_csv_tiki = bot_tiki.doc_csv("../data/dulieu_nhasach_tiki.csv")
+        if success_csv_tiki:
+            du_lieu_tiki = bot_tiki.du_lieu_tho
+            logger.info(f"✓ CSV Tiki: {len(du_lieu_tiki)} sản phẩm")
+        else:
+            logger.warning("⚠ Không có CSV Tiki, tiếp tục với Kaggle")
+            du_lieu_tiki = []
+
+    # ==================== OPTION 2: ĐỌC KAGGLE CSV ====================
+    logger.info("\n📖 Đọc từ Kaggle CSV...")
+    # Cậu nhớ đổi tên file data.csv cho đúng với máy tính nhé
+    doc_kaggle = DocKaggles("../data/data.csv")
+    du_lieu_kaggle = doc_kaggle.doc_va_lam_sach()
+
+    if len(du_lieu_kaggle) > 0:
+        logger.info(f"✓ Kaggle: {len(du_lieu_kaggle)} sản phẩm")
+    else:
+        logger.warning("⚠ Kaggle CSV không khả dụng hoặc trống")
+        du_lieu_kaggle = []
+
+    # ==================== GỘP DỮ LIỆU ====================
+    logger.info("\n🔗 Gộp dữ liệu từ các nguồn...")
+
+    list_df_to_merge = []
+
+    # Ánh xạ Tiki
+    if len(du_lieu_tiki) > 0:
+        lam_sach_tiki = LamSachDuLieu(du_lieu_tiki)
+        df_tiki_chuan = lam_sach_tiki.anh_xa_cot()
+        list_df_to_merge.append(df_tiki_chuan)
+        logger.info(f"   • Tiki DataFrame: {len(df_tiki_chuan)} dòng")
+
+    # Đưa Kaggle (đã làm sạch ở DocKaggles) vào list
+    if len(du_lieu_kaggle) > 0:
+        df_k = pd.DataFrame(du_lieu_kaggle)
+        list_df_to_merge.append(df_k)
+        logger.info(f"   • Kaggle DataFrame: {len(df_k)} dòng")
+
+    if len(list_df_to_merge) == 0:
+        logger.error("❌ Không có dữ liệu từ bất kỳ nguồn nào. Dừng chương trình.")
+        exit(1)
+
+    # Khởi tạo class rỗng để gộp và xử lý chung
+    lam_sach_final = LamSachDuLieu([])
+    lam_sach_final.xu_ly_gop_du_lieu(list_df_to_merge)
+
+    # ==================== LÀM SẠCH CHUNG ====================
+    logger.info("\n🧹 Bắt đầu làm sạch dữ liệu gộp...\n")
+    # Hàm lay_du_lieu_sach() sẽ tự động gọi thiếu/trùng, ép kiểu và ngoại lai
+    df_sach = lam_sach_final.lay_du_lieu_sach()
 
     # ==================== XUẤT DỮ LIỆU ====================
     logger.info("\n💾 Xuất dữ liệu...\n")
 
-    df_sach.to_csv("../data/dulieu_sach_v3.csv", index=False, encoding='utf-8-sig')
-    logger.info(f"✓ CSV sạch: ../data/dulieu_sach_v3.csv")
+    df_sach.to_csv("../data/dulieu_sach_v4_final.csv", index=False, encoding='utf-8-sig')
+    logger.info(f"✓ CSV sạch: ../data/dulieu_sach_v4_final.csv")
 
-    df_sach.to_json("../data/dulieu_sach_v3.json", orient='records', force_ascii=False, indent=2)
-    logger.info(f"✓ JSON sạch: ../data/dulieu_sach_v3.json")
+    df_sach.to_json("../data/dulieu_sach_v4_final.json", orient='records', force_ascii=False, indent=2)
+    logger.info(f"✓ JSON sạch: ../data/dulieu_sach_v4_final.json")
 
-    ngoai_lai = lam_sach.lay_ngoai_lai()
+    ngoai_lai = lam_sach_final.lay_ngoai_lai()
     if len(ngoai_lai) > 0:
-        ngoai_lai.to_csv("../data/ngoai_lai_v3.csv", index=False, encoding='utf-8-sig')
-        logger.info(f"✓ Ngoại lai: ../data/ngoai_lai_v3.csv ({len(ngoai_lai)} dòng)")
+        ngoai_lai.to_csv("../data/ngoai_lai_v4_final.csv", index=False, encoding='utf-8-sig')
+        logger.info(f"✓ Ngoại lai: ../data/ngoai_lai_v4_final.csv ({len(ngoai_lai)} dòng)")
 
-    lam_sach.xuat_bao_cao_chat_luong("../docs/bao_cao_chat_luong_v3.txt")
+    lam_sach_final.xuat_bao_cao_chat_luong("../docs/bao_cao_chat_luong_v4_final.txt")
 
     logger.info("\n📋 Mẫu dữ liệu sạch (5 dòng đầu):\n")
     print(df_sach[['ma_san_pham', 'ten_san_pham', 'nganh_hang', 'shop', 'gia', 'luot_ban', 'danh_gia']].head().to_string())
