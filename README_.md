@@ -76,18 +76,14 @@
 
 ## 📸 Giao diện
 
-<div align="center">
+### Tổng quan & Thống kê
+![Tổng quan & Thống kê](assets/screenshot-tongquan.png)
 
-**Tổng quan & Thống kê**
-<img src="assets/screenshot-tongquan.png" width="800">
+### Phân khúc Machine Learning
+![Phân khúc Machine Learning](assets/screenshot-phankhuc.png)
 
-**Phân khúc Machine Learning**
-<img src="assets/screenshot-phankhuc.png" width="800">
-
-**Trợ lý mua sắm AI**
-<img src="assets/screenshot-troly.png" width="800">
-
-</div>
+### Trợ lý mua sắm AI
+![Trợ lý mua sắm AI](assets/screenshot-troly.png)
 
 ---
 
