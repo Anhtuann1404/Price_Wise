@@ -9,10 +9,6 @@ warnings.filterwarnings('ignore')
 # ==========================================
 # 1. ĐỌC DỮ LIỆU ĐÃ LÀM SẠCH CỦA A
 # ==========================================
-# Dùng thẳng file A đã làm sạch (dulieu_sach_v3.csv) -> đã có sẵn nganh_hang
-# đúng tên tiếng Việt, luot_ban dạng số, và cờ da_kiem_tra_gia_ao (ngoại lai /
-# nghi ngờ giảm giá ảo). Giữ NGUYÊN tên cột gốc (shop, danh_gia, ty_le_giam...)
-# để khớp 100% với schema đang dùng trong streamlit_app.py của D/C.
 thu_muc_hien_tai = os.path.dirname(os.path.abspath(__file__))
 duong_dan_file = os.path.join(thu_muc_hien_tai, '..', 'data', 'dulieu_sach_v3.csv')
 df = pd.read_csv(duong_dan_file)
@@ -29,18 +25,34 @@ df_clean['cum_kmeans'] = np.random.choice(['Giá rẻ', 'Tầm trung', 'Cao cấ
 # ==========================================
 # 2. CLASS PHÂN TÍCH THỐNG KÊ
 # ==========================================
-# Đổi tên từ PhanTichGia -> PhanTichThongKe để không đụng tên với class
-# PhanTichGia bên streamlit_app.py (C viết, chuyên value_score + KMeans).
-#
-# Mỗi hàm vẽ biểu đồ KHÔNG còn tự plt.show() nữa mà return fig (từ
-# plt.subplots()) -> bên Streamlit chỉ cần gọi:
-#   st.pyplot(pt_thongke.cau_1_phan_phoi_nganh_hang())
-# là biểu đồ render thẳng vào trang web, không bị bung cửa sổ rời.
 class PhanTichThongKe:
+    """
+    Lớp thực hiện các phân tích thống kê mô tả và kiểm định trên dữ liệu
+    sản phẩm thương mại điện tử (Tiki), phục vụ trả lời các câu hỏi phân tích
+    của đề tài. Các hàm được thiết kế để trả về đối tượng Figure của Matplotlib, 
+    tối ưu cho việc tích hợp vào giao diện Streamlit.
+
+    Attributes:
+        df (pd.DataFrame): Dữ liệu sản phẩm đã làm sạch.
+    """
     def __init__(self, df):
+        """
+        Khởi tạo lớp phân tích thống kê.
+
+        Args:
+            df (pd.DataFrame): Bảng dữ liệu đầu vào.
+        """
         self.df = df
 
     def cau_1_phan_phoi_nganh_hang(self):
+        """
+        Câu hỏi 1: Giá sản phẩm phân bố như thế nào giữa các ngành hàng?
+        Tính toán phương sai, độ trải giữa (IQR) và trực quan hóa bằng 
+        boxplot giá theo Top 5 ngành hàng có nhiều sản phẩm nhất.
+
+        Returns:
+            matplotlib.figure.Figure: Biểu đồ boxplot thể hiện phân phối giá.
+        """
         print("\n--- CÂU 1: PHÂN PHỐI GIÁ THEO NGÀNH HÀNG ---")
         stats_df = self.df.groupby('nganh_hang')['gia'].agg(
             phuong_sai='var', IQR=lambda x: x.quantile(0.75) - x.quantile(0.25)
@@ -61,6 +73,14 @@ class PhanTichThongKe:
         return fig
 
     def cau_2_tuong_quan_spearman(self):
+        """
+        Câu hỏi 2: Có mối tương quan nào giữa phần trăm giảm giá và lượt bán không?
+        Tính toán hệ số tương quan phi tham số Spearman và trực quan hóa 
+        bằng biểu đồ phân tán (Scatter plot).
+
+        Returns:
+            matplotlib.figure.Figure: Biểu đồ Scatter plot thể hiện mức độ tương quan.
+        """
         print("\n--- CÂU 2: TƯƠNG QUAN ---")
         corr, p_value = stats.spearmanr(self.df['ty_le_giam'], self.df['luot_ban'])
         print(f"Spearman (% Giảm giá & Lượt bán): {corr:.3f}, P-value: {p_value:.3e}")
@@ -75,15 +95,15 @@ class PhanTichThongKe:
         return fig
 
     def cau_3_kiem_dinh_mann_whitney(self):
+        """
+        Câu hỏi 3: Có sự khác biệt ý nghĩa về giá giữa 2 nhóm phân loại không?
+        Thực hiện kiểm định phi tham số Mann-Whitney U để so sánh giá giữa 
+        2 ngành hàng lớn nhất, 2 shop lớn nhất, hoặc 2 mức giảm giá.
+
+        Returns:
+            matplotlib.figure.Figure: Biểu đồ Histogram so sánh phân phối giá của 2 nhóm.
+        """
         print("\n--- CÂU 3: KIỂM ĐỊNH MANN-WHITNEY U (so sánh giá giữa 2 nhóm) ---")
-        # Đúng định hướng khoa học ban đầu (Câu 5 trong kế hoạch): so sánh
-        # GIÁ giữa 2 nhóm (thay vì lượt bán giữa 2 mức giảm giá như bản cũ).
-        # Ưu tiên so 2 ngành hàng nhiều sản phẩm nhất; nếu data chỉ có 1
-        # ngành hàng (tuỳ đợt thu thập của A) thì tự chuyển sang so 2 shop
-        # nhiều sản phẩm nhất; nếu vẫn không đủ thì so giá giữa nhóm giảm
-        # giá sâu (>20%) và giảm giá ít/không giảm trong CÙNG ngành đó -
-        # luôn đảm bảo có kết quả chạy được, không phụ thuộc vào việc data
-        # đang đa dạng ngành/shop tới đâu.
         nhan_a = nhan_b = None
         gia_a = gia_b = None
         tieu_de = ""
@@ -102,7 +122,6 @@ class PhanTichThongKe:
                 gia_b = self.df[self.df['shop'] == nhan_b]['gia']
                 tieu_de = f"Shop: {nhan_a} vs {nhan_b}"
             else:
-                # Dự phòng cuối: chỉ 1 ngành + 1 shop -> so giá theo mức giảm giá
                 nhan_a, nhan_b = "Giảm giá > 20%", "Giảm giá <= 20%"
                 gia_a = self.df[self.df['ty_le_giam'] > 0.2]['gia']
                 gia_b = self.df[self.df['ty_le_giam'] <= 0.2]['gia']
@@ -129,6 +148,13 @@ class PhanTichThongKe:
         return fig
 
     def cau_4_top_san_pham_ban_chay(self):
+        """
+        Câu hỏi 4: Top 5 sản phẩm nào đang dẫn đầu về tổng lượt bán?
+        Trực quan hóa bằng biểu đồ cột (Bar chart) để so sánh hiệu suất.
+
+        Returns:
+            matplotlib.figure.Figure: Biểu đồ cột thống kê Top 5 sản phẩm.
+        """
         print("\n--- CÂU 4: TOP 5 SẢN PHẨM BÁN CHẠY NHẤT ---")
         top_sp = self.df.nlargest(5, 'luot_ban')[['ten_san_pham', 'luot_ban']]
         nhan = top_sp['ten_san_pham'].str.slice(0, 25) + '...'
@@ -149,6 +175,14 @@ class PhanTichThongKe:
         return fig
 
     def cau_5_ti_trong_nganh_hang(self):
+        """
+        Câu hỏi 5: Cơ cấu sản phẩm phân bổ như thế nào giữa các ngành hàng lớn?
+        Vẽ biểu đồ tròn (Pie chart) thể hiện tỷ trọng của Top 5 ngành hàng 
+        có số lượng sản phẩm lớn nhất.
+
+        Returns:
+            matplotlib.figure.Figure: Biểu đồ tròn tỷ trọng ngành hàng.
+        """
         print("\n--- CÂU 5: TỶ TRỌNG SẢN PHẨM THEO NGÀNH HÀNG ---")
         pie_data = self.df['nganh_hang'].value_counts().nlargest(5)
         mau_dam = ['#2E86AB', '#E27D60', '#41B3A3', '#C38D9E', '#8367C7']
@@ -166,8 +200,16 @@ class PhanTichThongKe:
         return fig
 
     def cau_6_giam_gia_ao(self):
-        """Trả về dict số liệu (không print-only) để Streamlit đưa thẳng
-        vào st.metric ở Tab 1 Tổng quan."""
+        """
+        Câu hỏi 6: Nhận diện tỷ lệ sản phẩm có dấu hiệu giảm giá ảo.
+        Tính toán tỷ lệ sản phẩm bị gắn cờ và so sánh mức giảm giá trung bình
+        giữa nhóm bình thường và nhóm nghi ngờ.
+
+        Returns:
+            dict: Chứa các metrics thống kê (số lượng, tổng số, tỷ lệ phần trăm, 
+                  mức giảm giá trung bình) để hiển thị lên thẻ số liệu (st.metric) 
+                  trên giao diện Streamlit.
+        """
         if 'da_kiem_tra_gia_ao' not in self.df.columns:
             return {"co_du_lieu": False}
 
