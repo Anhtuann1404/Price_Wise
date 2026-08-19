@@ -215,4 +215,13 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
-.streamlit/secrets.toml
+.streamlit/
+
+# MacOS
+.DS_Store
+**/.DS_Store
+
+# Bỏ qua các file dữ liệu thô và file xuất tạm thời
+data/dulieu_tiki*
+data/ngoai_lai*
+data/*.json
