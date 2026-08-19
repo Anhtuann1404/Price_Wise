@@ -128,7 +128,7 @@ Price_Wise/
 
 **1️⃣ Clone dự án và di chuyển vào thư mục**
 ```bash
-git clone <đường-dẫn-repo>
+git clone https://github.com/Anhtuann1404/Price_Wise
 cd Price_Wise
 ```
 
@@ -162,10 +162,10 @@ streamlit run web.py
 
 | Vai trò | Phụ trách |
 |:---|:---|
-| 🔧 Data Engineer | Thu thập & làm sạch dữ liệu |
-| 📊 Data Analyst | Phân tích thống kê |
-| 🤖 ML Engineer | Value score & phân cụm KMeans |
-| 🎨 Product / Dashboard Lead | Giao diện Streamlit & tích hợp hệ thống |
+| 🔧 Data Engineer (Nguyễn Hoàng Thắng) | Thu thập & làm sạch dữ liệu |
+| 📊 Data Analyst (Phùng Tấn Minh) | Phân tích thống kê |
+| 🤖 ML Engineer (Phạm Hồng Khải) | Value score & phân cụm KMeans |
+| 🎨 Product / Dashboard Lead(Nguyễn Tài Anh Tuân) | Giao diện Streamlit & tích hợp hệ thống |
 
 ---
 

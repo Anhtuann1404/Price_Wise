@@ -1,0 +1,40 @@
+BÁO CÁO CHẤT LƯỢNG DỮ LIỆU - PriceWise v4.5
+======================================================================
+
+1. THỐNG KÊ CHUNG
+   Tổng sản phẩm: 2,431
+   Số cột: 12
+   Ngành hàng: 5
+   Shop: 1
+
+2. THỐNG KÊ GIÁ
+   Min: 3,750 đ
+   Max: 40,990,000 đ
+   Trung bình: 582,668 đ
+   Trung vị: 126,000 đ
+   Std: 2,363,045 đ
+
+3. THỐNG KÊ LƯỢT BÁN
+   Min: 0
+   Max: 578888
+   Trung bình: 2682.0
+   Trung vị: 74
+
+4. THỐNG KÊ ĐÁNH GIÁ
+   Trung bình: 3.78 ⭐
+   Min: 0.0
+   Max: 5.0
+
+5. NGOẠI LAI PHÁT HIỆN
+   Số sản phẩm: 261
+   Tỷ lệ: 10.7%
+
+6. TOP 10 SHOP (THEO SỐ LƯỢNG)
+   Tiki: 2431 sản phẩm
+
+7. PHÂN BỐ THEO NGÀNH HÀNG
+   Sách tiếng Việt: 1106 sản phẩm (45.5%)
+   Làm đẹp - Sức khỏe: 400 sản phẩm (16.5%)
+   Nhà cửa - Đời sống: 400 sản phẩm (16.5%)
+   Thời trang nam: 400 sản phẩm (16.5%)
+   Điện thoại - Máy tính bảng: 125 sản phẩm (5.1%)

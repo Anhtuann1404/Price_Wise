@@ -525,7 +525,10 @@ class TroLyMuaSam:
 # =============================================================================
 
 if __name__ == "__main__":
-    df_sach = pd.read_csv("dulieu_sach_v3.csv")
+    #df_sach = pd.read_csv("dulieu_sach_v4.csv")
+    conn = sqlite3.connect("../data/pricewise_database.db")
+    df_sach = pd.read_sql_query("SELECT * FROM san_pham", conn)
+    conn.close()
 
     print("=" * 70)
     print("1) VALUE SCORE")
@@ -568,5 +571,5 @@ if __name__ == "__main__":
     print(goi_y.to_string(index=False) if not goi_y.empty else "Không có sản phẩm phù hợp.")
 
     # Lưu dữ liệu đã gắn value_score + cụm để Streamlit (Tab 2, Tab 3) dùng
-    pt.df.to_csv("dulieu_sach_v3_ml.csv", index=False, encoding="utf-8-sig")
-    print("\n✓ Đã lưu dulieu_sach_v3_ml.csv (dữ liệu + value_score + cụm)")
+    pt.df.to_csv("dulieu_sach_v4_ml.csv", index=False, encoding="utf-8-sig")
+    print("\n✓ Đã lưu dulieu_sach_v4_ml.csv (dữ liệu + value_score + cụm)")

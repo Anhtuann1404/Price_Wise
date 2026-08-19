@@ -6,6 +6,7 @@ Tích hợp end-to-end: Data Engineering (A) -> Data Analysis (B) -> Machine Lea
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import sqlite3 
 
 # Import các Class OOP từ thư mục src/
 from src.data_analysis import PhanTichThongKe
@@ -123,7 +124,13 @@ def bieu_do_dep(fig):
 @st.cache_data
 def doc_du_lieu():
     """Đọc dữ liệu sạch từ nhánh Data Engineering."""
-    df = pd.read_csv("data/dulieu_sach_v3.csv")
+    #df = pd.read_csv("data/dulieu_sach_v4_final.csv")
+     # ==========================================
+    # ĐỌC DỮ LIỆU TỪ SQLITE (Thay cho CSV)
+    # ==========================================
+    conn = sqlite3.connect("data/pricewise_database.db")
+    df = pd.read_sql_query("SELECT * FROM san_pham", conn)
+    conn.close()
     return df
 
 @st.cache_resource
@@ -174,7 +181,7 @@ def main():
         st.markdown("### 1. Bộ lọc Dữ liệu")
         cot_loc1, cot_loc2 = st.columns(2)
         with cot_loc1:
-            nganh_chon = st.multiselect("Ngành hàng", options=danh_sach_nganh, default=danh_sach_nganh[:5] if len(danh_sach_nganh) > 5 else danh_sach_nganh)
+            nganh_chon = st.multiselect("Ngành hàng", options=danh_sach_nganh, default=danh_sach_nganh)
         with cot_loc2:
             khoang_gia = st.slider(
                 "Khoảng giá (VNĐ)",
@@ -205,13 +212,13 @@ def main():
             with st.container(border=True):
                 st.plotly_chart(bieu_do_dep(px.histogram(df_loc, x="gia", title="Phân phối giá toàn tập", color_discrete_sequence=[MAU_NEN_BIEU_DO])), use_container_width=True)
             with st.container(border=True):
-                st.plotly_chart(bieu_do_dep(pt_thong_ke.cau_3_kiem_dinh_mann_whitney()), use_container_width=True)
+                st.pyplot(pt_thong_ke.cau_3_kiem_dinh_mann_whitney())
             with st.container(border=True):
                 st.plotly_chart(bieu_do_dep(pt_thong_ke.cau_5_ti_trong_nganh_hang()), use_container_width=True)
 
         with col_b:
             with st.container(border=True):
-                st.plotly_chart(bieu_do_dep(pt_thong_ke.cau_1_phan_phoi_nganh_hang()), use_container_width=True)
+                st.pyplot(pt_thong_ke.cau_1_phan_phoi_nganh_hang())
             with st.container(border=True):
                 st.plotly_chart(bieu_do_dep(pt_thong_ke.cau_2_tuong_quan_spearman()), use_container_width=True)
             with st.container(border=True):
