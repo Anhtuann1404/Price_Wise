@@ -108,18 +108,23 @@ Dữ liệu được thu thập trực tiếp từ **Tiki** thông qua API công
 ## 📁 Cấu trúc thư mục
 
 ```
-Price_Wise/
-├── data/                    # Dữ liệu đã thu thập và làm sạch
-├── docs/                    # Báo cáo chất lượng dữ liệu
-├── src/
-│   ├── data_engineering.py  # Thu thập & làm sạch dữ liệu
-│   ├── data_analysis.py     # Phân tích thống kê
-│   └── machine_learning.py  # Value score & phân cụm KMeans
-├── .streamlit/
-│   └── config.toml          # Cấu hình giao diện
-├── web.py                   # Ứng dụng Streamlit chính
-├── requirements.txt
-└── README.md
+Final_test/                   # Thư mục gốc dự án (PriceWise)
+├── data/                     # Dữ liệu đã thu thập và làm sạch
+├── docs/                     # Báo cáo chất lượng dữ liệu
+├── assets/                   # Chứa các tài nguyên tĩnh (hình ảnh, icon...)
+├── src/                      # Thư mục mã nguồn chính (Source code)
+│   ├── __init__.py           # Khai báo package Python để import module
+│   ├── data_engineering.py   # Thu thập & làm sạch dữ liệu
+│   ├── data_analysis.py      # Phân tích thống kê
+│   ├── machine_learning.py   # Value score & phân cụm KMeans
+│   └── link_preview.py       # Module xử lý hiển thị ảnh sản phẩm từ link
+├── .streamlit/               # Cấu hình giao diện Streamlit
+│   └── config.toml           # Cấu hình theme, layout cho Dashboard
+├── Bao_cao_phantich.ipynb    # File Jupyter Notebook báo cáo phân tích chi tiết
+├── web.py                    # Ứng dụng Streamlit chính (Dashboard)
+├── requirements.txt          # Danh sách thư viện Python cần cài đặt
+├── .gitignore                # Khai báo các file bỏ qua khi push code lên Git
+└── README.md                 # Tài liệu hướng dẫn dự án
 ```
 
 ---
@@ -165,7 +170,7 @@ streamlit run web.py
 | 🔧 Data Engineer (Nguyễn Hoàng Thắng) | Thu thập & làm sạch dữ liệu |
 | 📊 Data Analyst (Phùng Tấn Minh) | Phân tích thống kê |
 | 🤖 ML Engineer (Phạm Hồng Khải) | Value score & phân cụm KMeans |
-| 🎨 Product / Dashboard Lead(Nguyễn Tài Anh Tuân) | Giao diện Streamlit & tích hợp hệ thống |
+| 🎨 Product / Dashboard Lead(Nguyễn Tài Anh Tuấn) | Giao diện Streamlit & tích hợp hệ thống |
 
 ---
 

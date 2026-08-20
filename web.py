@@ -7,6 +7,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 import sqlite3 
+import time
+from src.link_preview import lay_thong_tin_link
 
 # Import các Class OOP từ thư mục src/
 from src.data_analysis import PhanTichThongKe
@@ -50,11 +52,20 @@ div[data-testid="stMetric"] {
     padding: 14px 16px;
 }
 
+/* NÂNG CẤP 1: CSS CHUẨN UX CHO THẺ SẢN PHẨM & HIỆU ỨNG HOVER */
 div[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #171B22;
     border: 1px solid #262B33 !important;
     border-radius: 16px !important;
     padding: 4px 6px;
+    transition: all 0.3s ease; /* Chuyển động mượt mà khi di chuột */
+}
+
+/* Khi chuột lướt qua: Đẩy thẻ lên 4px, phát sáng viền và đổ bóng */
+div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    transform: translateY(-4px);
+    border-color: #5EEAD4 !important;
+    box-shadow: 0 8px 24px rgba(94, 234, 212, 0.15);
 }
 
 .pw-badge {
@@ -69,7 +80,18 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 .pw-badge-tam { background: rgba(251,191,36,0.15); color:#FBBF24; }
 .pw-badge-dat { background: rgba(248,113,113,0.15); color:#F87171; }
 
-.pw-card-title { font-size: 16px; font-weight: 700; color:#E5E7EB; margin-bottom: 6px; }
+.pw-card-title { 
+    font-size: 16px; 
+    font-weight: 700; 
+    color:#E5E7EB; 
+    margin-bottom: 6px;
+    /* Ép tiêu đề luôn cao 48px và tối đa 2 dòng */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    height: 48px;
+}
 .pw-card-price { color:#5EEAD4; font-weight:700; font-size: 15px; }
 
 .pw-reasoning-box {
@@ -80,6 +102,12 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     font-size: 14.5px; 
     border-left: 4px solid #5EEAD4;
     color: #E5E7EB;
+    /* Ép khung giải thích luôn cao 110px và tối đa 4 dòng */
+    height: 110px;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 </style>
 """
@@ -123,11 +151,7 @@ def bieu_do_dep(fig):
 # ======================================================================
 @st.cache_data
 def doc_du_lieu():
-    """Đọc dữ liệu sạch từ nhánh Data Engineering."""
-    #df = pd.read_csv("data/dulieu_sach_v4_final.csv")
-     # ==========================================
-    # ĐỌC DỮ LIỆU TỪ SQLITE (Thay cho CSV)
-    # ==========================================
+    """Đọc dữ liệu sạch từ cơ sở dữ liệu SQLite."""
     conn = sqlite3.connect("data/pricewise_database.db")
     df = pd.read_sql_query("SELECT * FROM san_pham", conn)
     conn.close()
@@ -160,16 +184,15 @@ def main():
         df_goc = doc_du_lieu()
         df_ml, pt_thong_ke, pt_gia, tro_ly = chay_pipeline_hoc_may(df_goc)
     except Exception as e:
-        st.error(f"Lỗi khởi tạo hệ thống: Đảm bảo file 'data/dulieu_sach_v3.csv' và thư mục 'src/' tồn tại. Chi tiết lỗi: {e}")
+        st.error(f"Lỗi khởi tạo hệ thống: Đảm bảo file 'data/pricewise_database.db' và thư mục 'src/' tồn tại. Chi tiết lỗi: {e}")
         return
 
     tab_tong_quan, tab_phan_khuc, tab_tro_ly = st.tabs(
-        ["📊 Tổng quan & Thống kê", "🧩 Phân khúc Machine Learning", "🛍️ Trợ lý mua sắm AI"]
+        ["📊 Tổng quan & Thống kê", "🧩 Phân Khúc Sản Phẩm", "🛍️ Trợ lý mua sắm AI"]
     )
 
     danh_sach_nganh = df_ml['nganh_hang'].unique().tolist()
 
-    # Chỉ giữ ngành hàng có đủ sản phẩm để trợ lý gợi ý được (tránh chọn xong ra rỗng)
     so_luong_theo_nganh = df_ml['nganh_hang'].value_counts()
     NGUONG_TOI_THIEU = 3
     nganh_du_du_lieu = [n for n in danh_sach_nganh if so_luong_theo_nganh[n] >= NGUONG_TOI_THIEU]
@@ -225,10 +248,10 @@ def main():
                 st.plotly_chart(bieu_do_dep(pt_thong_ke.cau_4_top_san_pham_ban_chay()), use_container_width=True)
 
     # ------------------------------------------------------------------
-    # TAB 2: PHÂN KHÚC GIÁ (KMeans - Code C)
+    # TAB 2: PHÂN KHÚC GIÁ 
     # ------------------------------------------------------------------
     with tab_phan_khuc:
-        st.markdown("### Thuật toán KMeans Clustering & Value Score")
+        st.markdown("### Mô hình Phân khúc Sản phẩm (K-Means Clustering)")
         
         col_cluster1, col_cluster2 = st.columns([2, 1])
         with col_cluster1:
@@ -266,7 +289,7 @@ def main():
                     st.info(hang['mo_ta'])
 
     # ------------------------------------------------------------------
-    # TAB 3: TRỢ LÝ MUA SẮM (Giao diện D + Logic C)
+    # TAB 3: TRỢ LÝ MUA SẮM AI 
     # ------------------------------------------------------------------
     with tab_tro_ly:
         st.markdown("### 🤖 Trợ lý phân tích & Gợi ý sản phẩm thông minh")
@@ -287,9 +310,11 @@ def main():
             goi_y = tro_ly.goi_y_theo_ngan_sach(ngan_sach_tu_van, nganh_hang_tu_van, top_n=3)
 
             if goi_y.empty:
-                st.warning(f"Không tìm thấy sản phẩm nào trong ngành **{nganh_hang_tu_van}** phù hợp với ngân sách **{ngan_sach_tu_van:,.0f} đ**.")
+                # NÂNG CẤP 2: Dùng toast thay cho st.warning nếu không tìm thấy
+                st.toast(f"Hơi tiếc! Không có sản phẩm nào hợp với {ngan_sach_tu_van:,.0f} đ.", icon="🤔")
             else:
-                st.success(f"Tìm thấy **{len(goi_y)}** sản phẩm tối ưu nhất trong ngân sách của bạn!")
+                # NÂNG CẤP 2: Dùng toast xịn xò bật lên ở góc dưới màn hình
+                st.toast(f"Ting ting! Đã tìm thấy {len(goi_y)} sản phẩm tối ưu!", icon="🎉")
                 
                 tb_rating = df_ml[df_ml['nganh_hang'] == nganh_hang_tu_van]['danh_gia'].mean()
                 tb_luot_ban = df_ml[df_ml['nganh_hang'] == nganh_hang_tu_van]['luot_ban'].mean()
@@ -298,6 +323,18 @@ def main():
                 for idx, (_, sp) in enumerate(goi_y.iterrows()):
                     with cot_goi_y[idx]:
                         with st.container(border=True):
+                            preview = lay_thong_tin_link(sp["url"])
+                            if preview and preview["image"]:
+                                st.markdown(
+                                    f'<img src="{preview["image"]}" style="width: 100%; height: auto; border-radius: 8px; margin-bottom: 10px;">',
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.markdown(
+                                    '<div style="width: 100%; aspect-ratio: 1/1; background-color: #262B33; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #A9B7CC;">Không có ảnh</div>', 
+                                    unsafe_allow_html=True
+                                )
+                            
                             st.markdown(f'<div class="pw-card-title">{sp["ten_san_pham"]}</div>', unsafe_allow_html=True)
                             
                             nhan_badge = sp["ten_cum"].split(' - ')[1] if ' - ' in sp["ten_cum"] else sp["ten_cum"]

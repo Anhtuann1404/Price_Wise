@@ -22,6 +22,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+import sqlite3
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import MinMaxScaler

@@ -149,6 +149,7 @@ class PhanTichThongKe:
         """Trả về dữ liệu tính toán cho giao diện."""
         if 'da_kiem_tra_gia_ao' not in self.df.columns:
             return {"co_du_lieu": False}
+        self.df['da_kiem_tra_gia_ao'] = self.df['da_kiem_tra_gia_ao'].astype(bool)
         so_luong = int(self.df['da_kiem_tra_gia_ao'].sum())
         tong_so = len(self.df)
         ti_le = round(so_luong / tong_so * 100, 1)
