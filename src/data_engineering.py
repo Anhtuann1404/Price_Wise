@@ -1,16 +1,6 @@
 """
 PriceWise v4.5 - Thu thập & Làm sạch Dữ liệu TMĐT từ Tiki + Kaggle.
 
-🔄 Cập nhật chính:
-  ✅ Mở rộng: 2000+ sản phẩm từ Tiki (8 ngành) + Kaggle CSV
-  ✅ Fix luot_ban: Parse dict {"text": "Đã bán X", "value": X} → số
-  ✅ Fix nganh_hang: UU TIEN MA GOC (parent category) trước, sau đó QUÉT NGƯỢC
-  ✅ Fix shop: Xử lý `current_seller=None` → fallback "Tiki"
-  ✅ Thêm safe_float: Chống sập khi ép kiểu
-  ✅ Thêm class DocKaggles: Đọc CSV Kaggle (fix 5 lỗi)
-  ✅ Thêm xu_ly_gop_du_lieu: Đồng bộ 10 cột chung
-  ✅ Tối ưu: Health-check, retry logic, logging chi tiết
-
 Cấu trúc:
   - ThuThapDuLieu: Thu thập từ API Tiki (multi-category, retry logic)
   - DocKaggles: Đọc + làm sạch CSV Kaggle
