@@ -169,7 +169,7 @@ streamlit run web.py
 |:---|:---|
 | 🔧 Data Engineer (Nguyễn Hoàng Thắng) | Thu thập & làm sạch dữ liệu |
 | 📊 Data Analyst (Phùng Tấn Minh) | Phân tích thống kê |
-| 🤖 ML Engineer (Phạm Hồng Khải) | Value score & phân cụm KMeans |
+| 🤖 ML Engineer (Trần Hồng Khải) | Value score & phân cụm KMeans |
 | 🎨 Product / Dashboard Lead(Nguyễn Tài Anh Tuấn) | Giao diện Streamlit & tích hợp hệ thống |
 
 ---
